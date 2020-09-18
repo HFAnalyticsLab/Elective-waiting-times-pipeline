@@ -61,7 +61,7 @@ The list above is non exhaustive, but each of the individual .R codes in this re
 
 ## Authors
 
-* Sebastien Peytrignet - [@SebastienPeytr2] - [GitHub](speytrignet-thf)
+* Sebastien Peytrignet - [Twitter](https://twitter.com/sebastienpeytr2) - [GitHub](speytrignet-thf)
 * Karen Hodgson
 
 ## License
