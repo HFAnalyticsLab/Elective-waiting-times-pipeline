@@ -6,7 +6,7 @@
 
 This pipeline is being developed to automatically web-scrape the latest releases of [NHS England's waiting times datasets](https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2018-19/) and use the raw data to produce summary statistics which in the first instance mirror those produced in their monthly dashboards ([see example for July 2020 here](https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2020/09/Download-Waiting-Times-by-Hospital-Trust-XLS-5900K-Jul20.xls)).
 
-<img src="./example-rtt-dashboard.PNG">
+<img src="./example-rtt-dashboard.PNG" width="400" height="268">
 
 In addition, this data pipeline allows to produce descriptive statistics:
 
@@ -22,8 +22,8 @@ In addition, this data pipeline allows to produce descriptive statistics:
 
 For example, for the month of April 2020, we download:
 
-- RTT-APRIL-2020-full-extract: this file contains a row for each combination of provider (e.g. Guy's and St Thomas' NHS Foundation Trust), specialty (e.g. General Surgery) and pathway status (waiting to start, started admitted or started non-admitted). Each row summarises the distribution of waiting times for the relevant patients (e.g. how many patients are waiting between 0-1 weeks, 1-2 weeks, etc.).
-- Apr20-newproviders, Apr20-providers-admitted, Apr20-providers-nonadmitted : These three files allow us to identify, each month, which providers are flagged as independent (e.g. private clinics).
+- 'RTT-APRIL-2020-full-extract': this file contains a row for each combination of provider (e.g. Guy's and St Thomas' NHS Foundation Trust), specialty (e.g. General Surgery) and pathway status (waiting to start, started admitted or started non-admitted). Each row summarises the distribution of waiting times for the relevant patients (e.g. how many patients are waiting between 0-1 weeks, 1-2 weeks, etc.).
+- 'Apr20-newproviders', 'Apr20-providers-admitted', 'Apr20-providers-nonadmitted' : These three files allow us to identify, each month, which providers are flagged as independent (e.g. private clinics).
 
 * The code in '2. Produce descriptive statistics.R' allows us to generate the following monthly descriptive statistics:
 
