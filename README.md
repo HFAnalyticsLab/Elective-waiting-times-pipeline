@@ -6,6 +6,8 @@
 
 This pipeline is being developed to automatically web-scrape the latest releases of [NHS England's waiting times datasets](https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2018-19/) and use the raw data to produce summary statistics which in the first instance mirror those produced in their monthly dashboards ([see example for July 2020 here](https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2020/09/Download-Waiting-Times-by-Hospital-Trust-XLS-5900K-Jul20.xls)).
 
+<img src="./example-rtt-dashboard.png">
+
 In addition, this data pipeline allows to produce descriptive statistics:
 
 * At the provider or commmissioning CCG level
