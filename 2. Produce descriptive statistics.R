@@ -2,6 +2,9 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
+#Make sure functions run even it they fail
+#Run for total rather than specialty
+
 #Note: Incomplete Pathways with DTA not part of the dashboard statistics
 
 #QA of code and approach
@@ -27,6 +30,9 @@ rawdatadir <- "M:/Analytics/Elective waiting times data"
 
 #Git directory
 gitdir <- dirname(rstudioapi::getSourceEditorContext()$path)
+
+#Useful function
+only_letters <- function(x) { gsub("^([[:alpha:]]*).*$","\\1",x) }
 
 ###################################################################################
 ################### Import CCG-level deprivation data and geo lookup ##############
@@ -108,7 +114,7 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     
     total.nonmiss <- sum(datasubset_sum,na.rm=TRUE)
     
-  } else {
+  } else if (type=="incomplete") {
     
     datasubset_sum <- datasubset %>% 
       summarise(across(starts_with(c("Gt")), sum)) %>% t()
@@ -172,36 +178,57 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
   return(output)
 }
 
-return_week_lower(monthyear="Jun20",
-                  provider="WHITTINGTON HEALTH NHS TRUST",
-                  specialty="Total",
-                  quantiles=c(0.5,0.92,0.95),
-                  type="incomplete")
+return_week_lower_catch <- function(monthyear,provider,specialty,quantiles,type){
+  tryCatch(
+    {
+      return(return_week_lower(monthyear,provider,specialty,quantiles,type))
+    },
+    error=function(error_message) {
+      
+      output <- data.frame(monthyear=as.character(monthyear),
+                           provider=as.character(provider),
+                           specialty=as.character(specialty),
+                           type=as.character(type),
+                           total.patients=NA,
+                           rate.18wks.or.less=NA)
+      
+      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
+      colnames(weeks) <- paste0("weeks.",quantiles*100)
+      output <- cbind.data.frame(output,weeks)
+      rownames(output) <- 1
+      
+      return(output)
+    }
+  )
+}
 
-return_week_lower(monthyear="Jun20",
-                  provider="ENGLAND",
-                  specialty="Plastic Surgery",
-                  quantiles=c(0.5,0.92,0.95),
-                  type="completenonadmitted")
+# return_week_lower_catch(monthyear="Jul20",
+#                   provider="LANCASHIRE & SOUTH CUMBRIA NHS FOUNDATION TRUST",
+#                   specialty="Total",
+#                   quantiles=c(0.5,0.92,0.95),
+#                   type="incomplete")
+# 
+# return_week_lower_catch(monthyear="Jul20",
+#                   provider="ENGLAND",
+#                   specialty="Dermatology",
+#                   quantiles=c(0.5,0.92,0.95),
+#                   type="incomplete")
 
-#Run for all combinations: inputs
+#FILE 1: Run for all trusts
 
-monthyears <- c("Jun20")
+providers_trusts <- unique(RTT_allmonths$Provider.Org.Name)[str_detect(unique(RTT_allmonths$Provider.Org.Name),"TRUST")]
+all_specialties <- unique(RTT_allmonths$Treatment.Function.Name)
+all_months <- unique(RTT_allmonths$monthyr)
 
+monthyears <- all_months
 pathways <- c("incomplete","completeadmitted","completenonadmitted")
-
-providers <- c("ENGLAND",
-               "GUY'S AND ST THOMAS' NHS FOUNDATION TRUST",
-               "THE CHRISTIE NHS FOUNDATION TRUST")
-
-specialties <- c("General Surgery","Total","Plastic Surgery")
+providers <- c(providers_trusts,"ENGLAND")
+specialties <- c("Total")
 
 combinations <- expand.grid(monthyears,pathways,providers,specialties) %>% varhandle::unfactor()
 names(combinations) <- c("monthyears","pathways","providers","specialties")
 
-#Run for all combinations: run function
-
-out.combinations <- mapply(return_week_lower,
+out.combinations <- pbmapply(return_week_lower_catch,
                            monthyear=combinations$monthyears,
                            type=combinations$pathways,
                            provider=combinations$providers,
@@ -210,6 +237,44 @@ out.combinations <- mapply(return_week_lower,
 
 out.combinations.df <- as.data.frame(t(out.combinations))
 rownames(out.combinations.df) <- 1:nrow(out.combinations.df)
+
+#Clean up dates
+out.combinations.df$month <- only_letters(out.combinations.df$monthyear)
+out.combinations.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.df$monthyear))
+out.combinations.df$monthyear <- NULL
+
+#Save
+setwd(rawdatadir)
+fwrite(out.combinations.df, file = paste0(rawdatadir,"/Clean/Monthly - By trust and national.csv"), sep = ",")
+
+#FILE 1: Run for all specialties (national)
+
+monthyears <- all_months
+pathways <- c("incomplete","completeadmitted","completenonadmitted")
+providers <- c("ENGLAND")
+specialties <- all_specialties
+
+combinations <- expand.grid(monthyears,pathways,providers,specialties) %>% varhandle::unfactor()
+names(combinations) <- c("monthyears","pathways","providers","specialties")
+
+out.combinations2 <- pbmapply(return_week_lower_catch,
+                             monthyear=combinations$monthyears,
+                             type=combinations$pathways,
+                             provider=combinations$providers,
+                             specialty=combinations$specialties,
+                             MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
+
+out.combinations.df2 <- as.data.frame(t(out.combinations2))
+rownames(out.combinations.df2) <- 1:nrow(out.combinations.df2)
+
+#Clean up dates
+out.combinations.df2$month <- only_letters(out.combinations.df2$monthyear)
+out.combinations.df2$year <- paste0("20",tidyr::extract_numeric(out.combinations.df2$monthyear))
+out.combinations.df2$monthyear <- NULL
+
+#Save
+setwd(rawdatadir)
+fwrite(out.combinations.df2, file = paste0(rawdatadir,"/Clean/Monthly - By specialty and national.csv"), sep = ",")
 
 #########################################################
 ################### CCG level statistics ################
@@ -360,34 +425,59 @@ return_week_lower_ccg <- function(monthyear,ccg,specialty,quantiles,type,indepen
   return(output)
 }
 
-return_week_lower_ccg(monthyear="Jun20",
-                      ccg="NHS CENTRAL LONDON (WESTMINSTER) CCG",
-                      specialty="Total",quantiles=c(0.5,0.92,0.95),
-                      type="incomplete",independent=2)
+return_week_lower_ccg_catch <- function(monthyear,ccg,specialty,quantiles,type,independent){
+  tryCatch(
+    {
+      return(return_week_lower_ccg(monthyear,ccg,specialty,quantiles,type,independent))
+    },
+    error=function(error_message) {
+      
+      output <- data.frame(monthyear=as.character(monthyear),
+                           ccg=as.character(ccg),
+                           specialty=as.character(specialty),
+                           type=as.character(type),
+                           independent=NA,
+                           total.patients=NA,
+                           rate.18wks.or.less=NA)
+      
+      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
+      colnames(weeks) <- paste0("weeks.",quantiles*100)
+      output <- cbind.data.frame(output,weeks,IMD19_decile=NA,
+                                 IMD19_quintile=NA,
+                                 NHSER19NM=NA)
+      rownames(output) <- 1
+      
+      return(output)
+    }
+  )
+}
 
-return_week_lower_ccg(monthyear="Jun20",
-                      ccg="NHS LEEDS CCG",
-                      specialty="Total",quantiles=c(0.5,0.92,0.95),
-                      type="completenonadmitted",independent=1)
+# return_week_lower_ccg_catch(monthyear="Jun20",
+#                       ccg="NHS CENTRAL LONDON (WESTMINSTER) CCG",
+#                       specialty="Total",quantiles=c(0.5,0.92,0.95),
+#                       type="incomplete",independent=2)
+# 
+# return_week_lower_ccg_catch(monthyear="Jun20",
+#                       ccg="NHS LEEDS CCG",
+#                       specialty="Total",quantiles=c(0.5,0.92,0.95),
+#                       type="completenonadmitted",independent=2)
 
 #Run for all combinations: inputs
 
-monthyears <- "Jun20"
+all_ccgs <- unique(RTT_allmonths$Commissioner.Org.Name)
 
+monthyears <- all_months
 providertypes <- 0:2
-
 pathways <- c("incomplete","completeadmitted","completenonadmitted")
-
-ccgs <- c("NHS LEEDS CCG","NHS CENTRAL LONDON (WESTMINSTER) CCG")
-
-specialties <- c("Total","General Surgery","Plastic Surgery")
+ccgs <- c("ENGLAND",all_ccgs)
+specialties <- c("Total")
 
 combinations <- expand.grid(monthyears,providertypes,pathways,ccgs,specialties) %>% varhandle::unfactor()
 names(combinations) <- c("monthyears","providertypes","pathways","ccgs","specialties")
 
 #Run for all combinations: run function
 
-ccg.out.combinations <- mapply(return_week_lower_ccg,
+ccg.out.combinations3 <- pbmapply(return_week_lower_ccg_catch,
                            monthyear=combinations$monthyears,
                            independent=combinations$providertypes,
                            type = combinations$pathways,
@@ -395,5 +485,14 @@ ccg.out.combinations <- mapply(return_week_lower_ccg,
                            specialty=combinations$specialties,
                            MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
 
-ccg.out.combinations.df <- as.data.frame(t(ccg.out.combinations))
-rownames(ccg.out.combinations.df) <- 1:nrow(ccg.out.combinations.df)
+ccg.out.combinations.df3 <- as.data.frame(t(ccg.out.combinations3))
+rownames(ccg.out.combinations.df3) <- 1:nrow(ccg.out.combinations.df3)
+
+#Clean up dates
+ccg.out.combinations.df3$month <- only_letters(ccg.out.combinations.df3$monthyear)
+ccg.out.combinations.df3$year <- paste0("20",tidyr::extract_numeric(ccg.out.combinations.df3$monthyear))
+ccg.out.combinations.df3$monthyear <- NULL
+
+#Save
+setwd(rawdatadir)
+fwrite(ccg.out.combinations.df3, file = paste0(rawdatadir,"/Clean/Monthly - By ccg and national.csv"), sep = ",")
