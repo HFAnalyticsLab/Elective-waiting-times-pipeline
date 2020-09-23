@@ -178,6 +178,9 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
   return(output)
 }
 
+#This version of the function makes sure it still produces a result
+#if anything goes wrong
+
 return_week_lower_catch <- function(monthyear,provider,specialty,quantiles,type){
   tryCatch(
     {
@@ -424,6 +427,9 @@ return_week_lower_ccg <- function(monthyear,ccg,specialty,quantiles,type,indepen
   
   return(output)
 }
+
+#This version of the function makes sure it still produces a result
+#if anything goes wrong
 
 return_week_lower_ccg_catch <- function(monthyear,ccg,specialty,quantiles,type,independent){
   tryCatch(
