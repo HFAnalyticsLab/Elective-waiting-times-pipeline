@@ -60,4 +60,4 @@ rm(CCG_to_higher)
 ################### Save ##############
 #######################################
 
-fwrite(CCG_to_IMD19_data, file = paste0(rawdatadir,"/CCG_to_IMD19_data.csv"), sep = ",")
+fwrite(CCG_to_IMD19_data, file = paste0(rawdatadir,"/Clean/CCG_to_IMD19_data.csv"), sep = ",")
