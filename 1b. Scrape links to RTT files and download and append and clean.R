@@ -24,9 +24,9 @@ rawdatadir <- "M:/Analytics/Elective waiting times data"
 #####################################################
 
 #2019-2020
-months2021 <- c("Apr","May","Jun","Jul")
-years2021 <- c(rep(20,4))
-series2021 <- rep(2021,4)
+months2021 <- c("Apr","May","Jun","Jul","Aug")
+years2021 <- c(rep(20,length(months2021)))
+series2021 <- rep(2021,length(months2021))
 input2021 <- cbind.data.frame(month=paste0(months2021,years2021),series=series2021)
 
 #2019-2020
@@ -81,9 +81,6 @@ return_links_rtt <- function(month,series){
 }
 
 #Apply for all months to get all links
-
-return_links_rtt(month=inputs$month[1],
-                 series = inputs$series[1])
 
 links.out <- mapply(return_links_rtt,
                     month=inputs$month,
