@@ -65,6 +65,8 @@ return_links_rtt <- function(month,series){
   
   full.csv.link <- links[str_detect(links, "Full-CSV")][1]
   
+  providers.link.incomp <- links[str_detect(links, "Incomplete-Provider")][1]
+  
   providers.link.new <- links[str_detect(links, "New-Periods-Provider")][1]
   
   providers.link.adm <- links[str_detect(links, "Admitted-Provider")][1]
@@ -72,6 +74,7 @@ return_links_rtt <- function(month,series){
   providers.link.nonadm <- links[str_detect(links, "NonAdmitted-Provider")][1]
   
   out <- data.frame(month=month,full.csv.link,
+                    providers.link.incomp,
                     providers.link.new,
                     providers.link.adm,
                     providers.link.nonadm)
@@ -116,7 +119,11 @@ for (k in 1:nrow(links.out.df)){
   
   #Download Non-Admitted Providers
   download(as.character(links.out.df$providers.link.nonadm[k]),
-           dest=paste0(links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")  
+           dest=paste0(links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
+  
+  #Download Incomplete Providers
+  download(as.character(links.out.df$providers.link.incomp[k]),
+           dest=paste0(links.out.df$month[k],"-providers-incomplete.xls"), mode="wb")  
 }
 
 ###########################################################################
@@ -128,6 +135,12 @@ for (s in 1:nrow(links.out.df)){
   setwd(rawdatadir)
   setwd(as.character(links.out.df$month[s]))
   
+  incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
+                           sheet = "IS Provider",skip=13)
+  
+  incompleteDTA <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
+                           sheet = "IS Provider with DTA",skip=13)
+  
   new_provider <- read_excel(paste0(links.out.df$month[s],"-newproviders.xls"),
                              sheet = "IS Provider",skip=13)
   
@@ -137,8 +150,12 @@ for (s in 1:nrow(links.out.df)){
   nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.xls"),
                                 sheet = "IS Provider",skip=13)
   
-  codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`)
-  names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`)
+  #Any new ones in 'incomplete' files?
+  
+  codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`,
+             incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
+  names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,
+             incomplete$`Provider Name`,incompleteDTA$`Provider Name`)
   
   summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names)
   

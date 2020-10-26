@@ -54,8 +54,6 @@ CCG_to_IMD19 <- spTransform(CCG_to_IMD19, CRS(latlong)) #Set to the same project
 
 CCG_to_IMD19_data <- CCG_to_IMD19@data
 
-rm(CCG_to_IMD19)
-
 #Create quintiles
 
 CCG_to_IMD19_data <- CCG_to_IMD19_data %>%

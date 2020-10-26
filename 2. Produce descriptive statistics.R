@@ -2,18 +2,12 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Cannot QA those pathways that are not part of the dashboard?
-
-#Don't run if combination with pathway doesn't exist?
+#Cannot QA those pathways that are not part of the dashboard
 
 #Removing commsionner code NONC removes private patients
 #This is what the dashboard does
 
-#check that Totals are not just totals of trusts
-
-#QA of code and approach
 #Does all deprivation data merge? (No, e.g. Cheshire)
-#Do totals for England in CCG-level statistics match totals from dashboard?
 
 ##############################################
 ################### SETUP ####################
@@ -61,8 +55,13 @@ all_commisioners <- select(RTT_allmonths,Commissioner.Org.Name,Commissioner.Org.
   distinct(.)
 
 ccgs_with_imd <- filter(CCG_to_IMD19_data,!is.na(IMD19_decile)) %>% select(.,CCG19CDH) %>% unique()
+ccgs_with_region <- filter(CCG_to_IMD19_data,!is.na(NHSER19NM)) %>% select(.,CCG19CDH) %>% unique()
 
 unmatched_ccgs <- filter(RTT_allmonths,(Commissioner.Org.Code %in% unlist(ccgs_with_imd))==FALSE) %>%
+  select(.,Commissioner.Org.Name,Commissioner.Org.Code) %>%
+  distinct(.)
+
+unmatched_regions <- filter(RTT_allmonths,(Commissioner.Org.Code %in% unlist(ccgs_with_region))==FALSE) %>%
   select(.,Commissioner.Org.Name,Commissioner.Org.Code) %>%
   distinct(.)
   
@@ -119,11 +118,11 @@ regions <- unique(RTT_allmonths$NHSER19NM[-which(is.na(RTT_allmonths$NHSER19NM))
 
 return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
 
-# monthyear <- "Dec18"
-# provider <- "LANCASHIRE CARE NHS FOUNDATION TRUST"
+# monthyear <- "Aug20"
+# provider <- "ENGLAND"
 # specialty <- "Total"
 # quantiles <- c(0.95)
-# type <- "completeadmitted"
+# type <- "incomplete"
   
   #Pick relevant month-year
   
@@ -305,11 +304,11 @@ return_week_lower_catch <- function(monthyear,provider,specialty,quantiles,type)
   )
 }
 
-# return_week_lower_catch(monthyear="Dec18",
-#                   provider="LANCASHIRE CARE NHS FOUNDATION TRUST",
+# return_week_lower_catch(monthyear="Aug20",
+#                   provider="ENGLAND",
 #                   specialty="Total",
 #                   quantiles=c(0.5,0.92,0.95),
-#                   type="completeadmitted")
+#                   type="incomplete")
 
 # return_week_lower_catch(monthyear="Jun20",
 #                   provider="ENGLAND",
@@ -541,7 +540,7 @@ return_week_lower_ccg_catch <- function(monthyear,ccg_code,specialty,quantiles,t
 # return_week_lower_ccg_catch(monthyear="Aug20",
 #                       ccg="ENGLAND",
 #                       specialty="Total",quantiles=c(0.5,0.92,0.95),
-#                       type="newRTT",independent=2)
+#                       type="incomplete",independent=2)
 
 ############### By region
 
@@ -911,112 +910,112 @@ return_week_lower_dep_catch <- function(monthyear,decile,specialty,quantiles,typ
 ################### Compute descriptive statistics for all combinations ################
 ########################################################################################
 
-# ############### Create combinations for providers
-# 
-# combinations <- expand.grid(all_months,
-#                                     pathways,
-#                                     all_providers,all_specialties) %>% varhandle::unfactor()
-# names(combinations) <- c("monthyr","pathways","Provider.Org.Name","Treatment.Function.Name")
-# 
-# observed_combinations <- paste(RTT_allmonths$monthyr,
-#                                RTT_allmonths$Provider.Org.Name,
-#                                RTT_allmonths$Treatment.Function.Name,
-#                                RTT_allmonths$pathways,sep=" ")
-# 
-# combinations <- filter(combinations, Provider.Org.Name=="ENGLAND" |
-# paste(combinations$monthyr,combinations$Provider.Org.Name,
-#       combinations$Treatment.Function.Name,
-#       combinations$pathways,sep=" ") %in% observed_combinations)
-# 
-# ############### File 1: National and by specialty
-# 
-# combinations.one <- filter(combinations,Provider.Org.Name=="ENGLAND")
-# 
-# #combinations.one <- combinations.one[sample(1:nrow(combinations.one),10),]
-# 
-# out.combinations.one <- pbmapply(return_week_lower_catch,
-#                                  monthyear=combinations.one$monthyr,
-#                                  type=combinations.one$pathways,
-#                                  provider=combinations.one$Provider.Org.Name,
-#                                  specialty=combinations.one$Treatment.Function.Name,
-#                                  MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-# 
-# out.combinations.one.df <- as.data.frame(t(out.combinations.one))
-# rownames(out.combinations.one.df) <- 1:nrow(out.combinations.one.df)
-# rm(combinations.one,out.combinations.one)
-# 
-# #Clean up dates for Excel
-# out.combinations.one.df$month <- only_letters(out.combinations.one.df$monthyear)
-# out.combinations.one.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.one.df$monthyear))
-# out.combinations.one.df$monthyear <- NULL
-# 
-# ############### File 2: National and by trust, combined specialties
-# 
-# combinations.two <- filter(combinations,Provider.Org.Name %in% providers_trusts) %>%
-#   filter(.,Treatment.Function.Name=="Total")
-# 
-# #combinations.two <- combinations.two[sample(1:nrow(combinations.two),10),]
-# 
-# out.combinations.two <- pbmapply(return_week_lower_catch,
-#                                  monthyear=combinations.two$monthyr,
-#                                  type=combinations.two$pathways,
-#                                  provider=combinations.two$Provider.Org.Name,
-#                                  specialty=combinations.two$Treatment.Function.Name,
-#                                  MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-# 
-# out.combinations.two.df <- as.data.frame(t(out.combinations.two))
-# rownames(out.combinations.two.df) <- 1:nrow(out.combinations.two.df)
-# rm(combinations.two,out.combinations.two)
-# 
-# #Clean up dates for Excel
-# out.combinations.two.df$month <- only_letters(out.combinations.two.df$monthyear)
-# out.combinations.two.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.two.df$monthyear))
-# out.combinations.two.df$monthyear <- NULL
-# 
-# ############### By CCG
-# 
-# ############### Create combinations for CCGs
-# 
-# providertypes <- 0:2
-# 
-# combinations.ccg <- expand.grid(all_months,
-#                             pathways,
-#                             all_ccgs,all_specialties,providertypes) %>% varhandle::unfactor()
-# names(combinations.ccg) <- c("monthyr","pathways","Commissioner.Org.Code","Treatment.Function.Name","providertypes")
-# 
-# observed_combinations.ccg <- paste(RTT_allmonths$monthyr,
-#                                    RTT_allmonths$Commissioner.Org.Code,
-#                                    RTT_allmonths$Treatment.Function.Name,
-#                                    RTT_allmonths$pathways,sep=" ")
-# 
-# combinations.ccg <- filter(combinations.ccg, Commissioner.Org.Code=="ENGLAND" |
-#                          paste(combinations.ccg$monthyr,combinations.ccg$Commissioner.Org.Code,
-#                                combinations.ccg$Treatment.Function.Name,
-#                                combinations.ccg$pathways,sep=" ") %in% observed_combinations.ccg)
-# 
-# ############### File 3: National and by CCG, all specialties
-# 
-# combinations.three <- filter(combinations.ccg,(Commissioner.Org.Code %in% all_ccgs)&
-#                                Commissioner.Org.Code=="ENGLAND")
-# 
-# #combinations.three <- combinations.three[sample(1:nrow(combinations.three),10),]
-# 
-# out.combinations.three <- pbmapply(return_week_lower_ccg_catch,
-#                                    monthyear=combinations.three$monthyr,
-#                                    independent=combinations.three$providertypes,
-#                                    type = combinations.three$pathways,
-#                                    ccg_code=combinations.three$Commissioner.Org.Code,
-#                                    specialty=combinations.three$Treatment.Function.Name,
-#                                    MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-# 
-# out.combinations.three.df <- as.data.frame(t(out.combinations.three))
-# rownames(out.combinations.three.df) <- 1:nrow(out.combinations.three.df)
-# rm(combinations.three,out.combinations.three)
-# 
-# #Clean up dates
-# out.combinations.three.df$month <- only_letters(out.combinations.three.df$monthyear)
-# out.combinations.three.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.three.df$monthyear))
-# out.combinations.three.df$monthyear <- NULL
+############### Create combinations for providers
+
+combinations <- expand.grid(all_months,
+                                    pathways,
+                                    all_providers,all_specialties) %>% varhandle::unfactor()
+names(combinations) <- c("monthyr","pathways","Provider.Org.Name","Treatment.Function.Name")
+
+observed_combinations <- paste(RTT_allmonths$monthyr,
+                               RTT_allmonths$Provider.Org.Name,
+                               RTT_allmonths$Treatment.Function.Name,
+                               RTT_allmonths$pathways,sep=" ")
+
+combinations <- filter(combinations, Provider.Org.Name=="ENGLAND" |
+paste(combinations$monthyr,combinations$Provider.Org.Name,
+      combinations$Treatment.Function.Name,
+      combinations$pathways,sep=" ") %in% observed_combinations)
+
+############### File 1: National and by specialty
+
+combinations.one <- filter(combinations,Provider.Org.Name=="ENGLAND")
+
+#combinations.one <- combinations.one[sample(1:nrow(combinations.one),10),]
+
+out.combinations.one <- pbmapply(return_week_lower_catch,
+                                 monthyear=combinations.one$monthyr,
+                                 type=combinations.one$pathways,
+                                 provider=combinations.one$Provider.Org.Name,
+                                 specialty=combinations.one$Treatment.Function.Name,
+                                 MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
+
+out.combinations.one.df <- as.data.frame(t(out.combinations.one))
+rownames(out.combinations.one.df) <- 1:nrow(out.combinations.one.df)
+rm(combinations.one,out.combinations.one)
+
+#Clean up dates for Excel
+out.combinations.one.df$month <- only_letters(out.combinations.one.df$monthyear)
+out.combinations.one.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.one.df$monthyear))
+out.combinations.one.df$monthyear <- NULL
+
+############### File 2: National and by trust, combined specialties
+
+combinations.two <- filter(combinations,Provider.Org.Name %in% providers_trusts) %>%
+  filter(.,Treatment.Function.Name=="Total")
+
+#combinations.two <- combinations.two[sample(1:nrow(combinations.two),10),]
+
+out.combinations.two <- pbmapply(return_week_lower_catch,
+                                 monthyear=combinations.two$monthyr,
+                                 type=combinations.two$pathways,
+                                 provider=combinations.two$Provider.Org.Name,
+                                 specialty=combinations.two$Treatment.Function.Name,
+                                 MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
+
+out.combinations.two.df <- as.data.frame(t(out.combinations.two))
+rownames(out.combinations.two.df) <- 1:nrow(out.combinations.two.df)
+rm(combinations.two,out.combinations.two)
+
+#Clean up dates for Excel
+out.combinations.two.df$month <- only_letters(out.combinations.two.df$monthyear)
+out.combinations.two.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.two.df$monthyear))
+out.combinations.two.df$monthyear <- NULL
+
+############### By CCG
+
+############### Create combinations for CCGs
+
+providertypes <- 0:2
+
+combinations.ccg <- expand.grid(all_months,
+                            pathways,
+                            all_ccgs,all_specialties,providertypes) %>% varhandle::unfactor()
+names(combinations.ccg) <- c("monthyr","pathways","Commissioner.Org.Code","Treatment.Function.Name","providertypes")
+
+observed_combinations.ccg <- paste(RTT_allmonths$monthyr,
+                                   RTT_allmonths$Commissioner.Org.Code,
+                                   RTT_allmonths$Treatment.Function.Name,
+                                   RTT_allmonths$pathways,sep=" ")
+
+combinations.ccg <- filter(combinations.ccg, Commissioner.Org.Code=="ENGLAND" |
+                         paste(combinations.ccg$monthyr,combinations.ccg$Commissioner.Org.Code,
+                               combinations.ccg$Treatment.Function.Name,
+                               combinations.ccg$pathways,sep=" ") %in% observed_combinations.ccg)
+
+############### File 3: National and by CCG, all specialties
+
+combinations.three <- filter(combinations.ccg,(Commissioner.Org.Code %in% all_ccgs)&
+                               Commissioner.Org.Code=="ENGLAND")
+
+#combinations.three <- combinations.three[sample(1:nrow(combinations.three),10),]
+
+out.combinations.three <- pbmapply(return_week_lower_ccg_catch,
+                                   monthyear=combinations.three$monthyr,
+                                   independent=combinations.three$providertypes,
+                                   type = combinations.three$pathways,
+                                   ccg_code=combinations.three$Commissioner.Org.Code,
+                                   specialty=combinations.three$Treatment.Function.Name,
+                                   MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
+
+out.combinations.three.df <- as.data.frame(t(out.combinations.three))
+rownames(out.combinations.three.df) <- 1:nrow(out.combinations.three.df)
+rm(combinations.three,out.combinations.three)
+
+#Clean up dates
+out.combinations.three.df$month <- only_letters(out.combinations.three.df$monthyear)
+out.combinations.three.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.three.df$monthyear))
+out.combinations.three.df$monthyear <- NULL
 
 ############### Create combinations for regions
 
@@ -1094,7 +1093,10 @@ out.combinations.five.df$monthyear <- NULL
 #                          "Regional, by IS and all spec" = out.combinations.four.df,
 #                          "By deprivation, by IS and all" = out.combinations.five.df)
 
-list_of_datasets <- list("Regional, by IS and all spec" = out.combinations.four.df,
+list_of_datasets <- list("National, by IS and spec" = out.combinations.three.df,
+                         "Regional, by IS and all spec" = out.combinations.four.df,
                          "By deprivation, by IS and all" = out.combinations.five.df)
 
-write.xlsx(list_of_datasets, file = paste0(rawdatadir,"/Clean/RTT - monthly series summarised 10 15.xlsx"))
+#Migrate metadata and first two from old file (CF extension)
+
+write.xlsx(list_of_datasets, file = paste0(rawdatadir,"/Clean/RTT - monthly series summarised 10 26.xlsx"))
