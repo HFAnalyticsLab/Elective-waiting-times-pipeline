@@ -152,6 +152,11 @@ for (s in 1:nrow(links.out.df)){
   
   #Any new ones in 'incomplete' files?
   
+  #s=1
+  #codes_inc <- c(incomplete$`Provider Code`,incompleteDTA$`Provider Code`,"XXYYXX")
+  #codes_old <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`)
+  #codes_inc[which((codes_inc %in% codes_old)==FALSE)]
+  
   codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`,
              incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
   names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,

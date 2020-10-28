@@ -308,7 +308,7 @@ return_week_lower_catch <- function(monthyear,provider,specialty,quantiles,type)
 #                   provider="ENGLAND",
 #                   specialty="Total",
 #                   quantiles=c(0.5,0.92,0.95),
-#                   type="incomplete")
+#                   type="completenonadmitted")
 
 # return_week_lower_catch(monthyear="Jun20",
 #                   provider="ENGLAND",
@@ -1087,16 +1087,14 @@ out.combinations.five.df$monthyear <- NULL
 ################### Save to a worksheet ################
 ########################################################
 
-# list_of_datasets <- list("National, by specialty" = out.combinations.one.df,
-#                          "National and Trust, comb spec" = out.combinations.two.df,
-#                          "National, by IS and spec" = out.combinations.three.df,
-#                          "Regional, by IS and all spec" = out.combinations.four.df,
-#                          "By deprivation, by IS and all" = out.combinations.five.df)
-
-list_of_datasets <- list("National, by IS and spec" = out.combinations.three.df,
+list_of_datasets <- list("National, by specialty" = out.combinations.one.df,
+                         "National and Trust, comb spec" = out.combinations.two.df,
+                         "National, by IS and spec" = out.combinations.three.df,
                          "Regional, by IS and all spec" = out.combinations.four.df,
                          "By deprivation, by IS and all" = out.combinations.five.df)
 
+# list_of_datasets <- list("Regional, by IS and all spec" = out.combinations.four.df)
+
 #Migrate metadata and first two from old file (CF extension)
 
-write.xlsx(list_of_datasets, file = paste0(rawdatadir,"/Clean/RTT - monthly series summarised 10 26.xlsx"))
+write.xlsx(list_of_datasets, file = paste0(rawdatadir,"/Clean/RTT - monthly series summarised 10 27 region.xlsx"))
