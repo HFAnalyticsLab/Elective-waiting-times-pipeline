@@ -43,7 +43,7 @@ gitdir <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 CCG_to_higher <- fread(paste0(rawdatadir,"/Lookups/Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv"), header=TRUE, sep=",", check.names=T)
 
-manually_added <- fread(paste0(rawdatadir,"/Lookups/unmatched_ccgs_matched.csv"), header=TRUE, sep=",", check.names=T) %>%
+manually_added <- fread(paste0(rawdatadir,"/Lookups/unmatched_ccgs_matched_central.csv"), header=TRUE, sep=",", check.names=T) %>%
   filter(.,NHSER19NM!="") %>% rename(.,ccg19nm=Commissioner.Org.Name,CCG19CDH=Commissioner.Org.Code)
 
 #Deprivation data
