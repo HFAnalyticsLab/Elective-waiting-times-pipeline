@@ -995,8 +995,8 @@ combinations.ccg <- filter(combinations.ccg, Commissioner.Org.Code=="ENGLAND" |
 
 ############### File 3: National and by CCG, all specialties
 
-combinations.three <- filter(combinations.ccg,(Commissioner.Org.Code %in% c("13Q","X24"))&
-                               providertypes==2&Treatment.Function.Name=="Total")
+combinations.three <- filter(combinations.ccg,(Commissioner.Org.Code %in% all_ccgs)
+                               &Treatment.Function.Name=="Total")
 
 #combinations.three <- combinations.three[sample(1:nrow(combinations.three),10),]
 
@@ -1092,8 +1092,6 @@ list_of_datasets <- list("National, by specialty" = out.combinations.one.df,
                          "National, by IS and spec" = out.combinations.three.df,
                          "Regional, by IS and all spec" = out.combinations.four.df,
                          "By deprivation, by IS and all" = out.combinations.five.df)
-
-# list_of_datasets <- list("Regional, by IS and all spec" = out.combinations.four.df)
 
 #Migrate metadata and first two from old file (CF extension)
 
