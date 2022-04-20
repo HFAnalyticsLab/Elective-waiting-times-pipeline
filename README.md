@@ -12,7 +12,7 @@ In addition, this data pipeline allows to produce descriptive statistics:
 
 * At the provider or commissioning CCG level
 * According to whether the provider is independent or not
-* According to the commissioning CCG's level of deprivation based to the 2019 IMD ([produced by MCHLG](https://data-communities.opendata.arcgis.com/datasets/8247db94b3ad4237950806fd53563dd3_0))
+* According to the commissioning CCG's level of deprivation based on the 2019 IMD ([produced by MCHLG](https://data-communities.opendata.arcgis.com/datasets/8247db94b3ad4237950806fd53563dd3_0))
 * According to the commissioning CCG's region (based on an [ONS lookup](https://geoportal.statistics.gov.uk/datasets/clinical-commissioning-group-to-nhs-england-region-local-office-and-nhs-england-region-april-2019-lookup-in-england))
 
 ## How does it work?
