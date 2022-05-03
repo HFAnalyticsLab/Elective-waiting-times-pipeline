@@ -2,6 +2,8 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
+#Why is final upload not working?
+#Delete temporary files along the way
 #Only download files that aren't already there
 #Use s3sync() to sync into a bucket when ready
 #push code
@@ -301,3 +303,19 @@ for (j in 1:nrow(links.out.df)){
 #Save
 setwd(paste0(R_workbench,"/RTT_temp_data/"))
 fwrite(storage.rtt, file = "RTT_allmonths.csv", sep = ",")
+
+#######################################################################
+################### Sync local folder to S3 bucket ####################
+#######################################################################
+
+setwd(paste0(R_workbench,"/RTT_temp_data/"))
+
+put_object(file = 'RTT_allmonths.csv',
+           object = 'RTT waiting times data/RTT_allmonths.csv',
+           bucket = IHT_bucket, show_progress = TRUE,
+           mulitpart=TRUE)
+
+put_object(file = 'IS_providers_allmonths.csv',
+           object = 'RTT waiting times data/IS_providers_allmonths.csv',
+           bucket = IHT_bucket, show_progress = TRUE,
+           mulitpart=TRUE)

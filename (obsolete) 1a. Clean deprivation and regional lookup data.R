@@ -7,21 +7,21 @@
 ##############################################
 
 #Load packages
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(dplyr,stringr,sp,ggplot2,plyr,readODS,
-               gmodels,DescTools,data.table,rgdal,
-               tibble,leaflet,raster,plotly,
-               pbapply,pbmcapply,here,readxl,varhandle)
+
+library(tidyverse)
+library(stringr)
+library(tidyr)
+library(pbapply)
+library(data.table)
+library(readr)
+library(readxl)
+library(aws.s3)
 
 #Clean up the global environment
 rm(list = ls())
 
-#Projection codes
-ukgrid = "+init=epsg:27700"
-latlong="+init=epsg:4326"
-
 #Set directory where inputs are saved
-rawdatadir <- "M:/Analytics/Elective waiting times data"
+rawdatabucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp/RTT waiting times data/"
 
 #Git directory
 gitdir <- dirname(rstudioapi::getSourceEditorContext()$path)
@@ -57,7 +57,8 @@ CCG_to_IMD19_data <- CCG_to_IMD19@data
 #Create quintiles
 
 CCG_to_IMD19_data <- CCG_to_IMD19_data %>%
-  mutate(.,IMD19_decile = ntile(RAvgScor, 10),IMD19_quintile=ntile(RAvgScor, 5)) %>%
+  mutate(.,IMD19_decile = ntile(RAvgScor, 10),
+         IMD19_quintile=ntile(RAvgScor, 5)) %>%
   mutate(.,ccg19nm=toupper(ccg19nm))
 
 #Merge in region data and NHS CCG codes
