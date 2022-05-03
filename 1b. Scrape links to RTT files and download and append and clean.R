@@ -3,6 +3,9 @@
 ##########################################################
 
 #Only download files that aren't already there
+#Use s3sync() to sync into a bucket when ready
+#push code
+#delete file 1a and file 2 from AWS branch
 
 #Useful AWS functions
 
@@ -155,58 +158,65 @@ links.out.df <- as.data.frame(t(links.out)) %>%
   filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet
 rm(links.out)
 
-links.out.df <- head(links.out.df,n=5) #For now, check that it works for the first 5 months
+#links.out.df <- head(links.out.df,n=5) #For now, check that it works for the first 5 months
 
 ###########################################################
 ################### Download all files ####################
 ###########################################################
 
+already_there <- list.dirs(path = "RTT_temp_data", full.names = TRUE, recursive = TRUE) %>%
+  str_replace_all(.,"RTT_temp_data/","")
+
 for (k in 1:nrow(links.out.df)){
-
-  ### Full CSV
   
-  #Download Full CSV in workbench
-  download(as.character(links.out.df$full.csv.link[k]),
-           dest=paste0("RTT_temp_data/",links.out.df$month[k],".zip"), mode="wb")
-
-  #Unzip Full CSV in workbench
-  unzip(paste0("RTT_temp_data/",links.out.df$month[k],".zip"),
-        exdir = paste0("RTT_temp_data/",links.out.df$month[k]))
-  
-  #Delete zip file
-  file.remove(paste0("RTT_temp_data/",links.out.df$month[k],".zip"))
-
-  ### New providers
-  
-  #Download New Providers
-  download(as.character(links.out.df$providers.link.new[k]),
-           dest=paste0("RTT_temp_data/",
-                       paste(links.out.df$month[k]),"/",
-                       links.out.df$month[k],"-newproviders.xls"), mode="wb")
-  
-  ### Admitted providers
-  
-  #Download Admitted Providers
-  download(as.character(links.out.df$providers.link.adm[k]),
-           dest=paste0("RTT_temp_data/",
-                       paste(links.out.df$month[k]),"/",
-                       links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
-  
-  ### Non-admitted providers
-  
-  #Download Non-Admitted Providers
-  download(as.character(links.out.df$providers.link.nonadm[k]),
-           dest=paste0("RTT_temp_data/",
-                       paste(links.out.df$month[k]),"/",
-                       links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
-  
-  ### Incomplete providers
-  
-  #Download Incomplete Providers
-  download(as.character(links.out.df$providers.link.incomp[k]),
-           dest=paste0("RTT_temp_data/",
-                       paste(links.out.df$month[k]),"/",
-                       links.out.df$month[k],"-providers-incomplete.xls"), mode="wb")
+if (links.out.df$month[k] %in% already_there){
+  cat("The files are already there")
+}
+  else{
+    cat("Downloading new files")
+    ### Full CSV
+    
+    #Download Full CSV in workbench
+    download(as.character(links.out.df$full.csv.link[k]),
+             dest=paste0("RTT_temp_data/",links.out.df$month[k],".zip"), mode="wb")
+    #Unzip Full CSV in workbench
+    unzip(paste0("RTT_temp_data/",links.out.df$month[k],".zip"),
+          exdir = paste0("RTT_temp_data/",links.out.df$month[k]))
+    #Delete zip file
+    file.remove(paste0("RTT_temp_data/",links.out.df$month[k],".zip"))
+    
+    ### New providers
+    
+    #Download New Providers
+    download(as.character(links.out.df$providers.link.new[k]),
+             dest=paste0("RTT_temp_data/",
+                         paste(links.out.df$month[k]),"/",
+                         links.out.df$month[k],"-newproviders.xls"), mode="wb")
+    
+    ### Admitted providers
+    
+    #Download Admitted Providers
+    download(as.character(links.out.df$providers.link.adm[k]),
+             dest=paste0("RTT_temp_data/",
+                         paste(links.out.df$month[k]),"/",
+                         links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
+    
+    ### Non-admitted providers
+    
+    #Download Non-Admitted Providers
+    download(as.character(links.out.df$providers.link.nonadm[k]),
+             dest=paste0("RTT_temp_data/",
+                         paste(links.out.df$month[k]),"/",
+                         links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
+    
+    ### Incomplete providers
+    
+    #Download Incomplete Providers
+    download(as.character(links.out.df$providers.link.incomp[k]),
+             dest=paste0("RTT_temp_data/",
+                         paste(links.out.df$month[k]),"/",
+                         links.out.df$month[k],"-providers-incomplete.xls"), mode="wb") 
+  }
 }
 
 ###########################################################################
@@ -214,6 +224,8 @@ for (k in 1:nrow(links.out.df)){
 ###########################################################################
 
 for (s in 1:nrow(links.out.df)){
+  
+  #Open all provider files for one month and append
 
   setwd(paste0(R_workbench,"/RTT_temp_data/"))
   setwd(as.character(links.out.df$month[s]))
@@ -233,7 +245,7 @@ for (s in 1:nrow(links.out.df)){
   nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.xls"),
                                 sheet = "IS Provider",skip=13)
   
-  #IS providers
+  #IS providers for that month
   
   codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`,
              incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
@@ -246,7 +258,6 @@ for (s in 1:nrow(links.out.df)){
   } else {
     storage <- plyr::rbind.fill(storage,summary_month)
   }
-  
 }
 
 #Remove duplicates
