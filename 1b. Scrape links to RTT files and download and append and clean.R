@@ -2,7 +2,20 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Only download files that are missing
+#Only download files that aren't already there
+
+#Useful AWS functions
+
+#dummy <- data.frame(var1=as.character(1:100))
+# s3write_using(dummy # What R object we are saving
+#               , FUN = write.csv # Which R function we are using to save
+#               , object = 'RTT waiting times data/dummy.csv' # Name of the file to save to (include file type)
+#               , bucket = "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp") # Bucket name defined above
+# 
+
+#Create sub-folder in S3
+# put_folder(paste0(RTT_subfolder,"/",as.character(links.out.df$month[k])),
+#            bucket = IHT_bucket)
 
 ##############################################
 ################### SETUP ####################
@@ -25,13 +38,13 @@ library(aws.s3)
 
 rm(list = ls()) #Clear the working environment
 
-#Directories
+#Directories in S3
 
 IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
 RTT_subfolder <- "RTT waiting times data"
-R_workbench <- dirname(getwd())
+R_workbench <- path.expand("~")
 
-#Create folder in workbench for temporary files
+#Create folder in local workbench for temporary files
 
 setwd(R_workbench)
 temp_folder <- "RTT_temp_data"
@@ -142,24 +155,13 @@ links.out.df <- as.data.frame(t(links.out)) %>%
   filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet
 rm(links.out)
 
-links.out.df <- head(links.out.df,n=5)
+links.out.df <- head(links.out.df,n=5) #For now, check that it works for the first 5 months
 
 ###########################################################
 ################### Download all files ####################
 ###########################################################
 
-#dummy <- data.frame(var1=as.character(1:100))
-# s3write_using(dummy # What R object we are saving
-#               , FUN = write.csv # Which R function we are using to save
-#               , object = 'RTT waiting times data/dummy.csv' # Name of the file to save to (include file type)
-#               , bucket = "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp") # Bucket name defined above
-# 
-
 for (k in 1:nrow(links.out.df)){
-  
-  #Create sub-folder in S3
-  # put_folder(paste0(RTT_subfolder,"/",as.character(links.out.df$month[k])),
-  #            bucket = IHT_bucket)
 
   ### Full CSV
   
@@ -213,7 +215,7 @@ for (k in 1:nrow(links.out.df)){
 
 for (s in 1:nrow(links.out.df)){
 
-  setwd(rawdatadir)
+  setwd(paste0(R_workbench,"/RTT_temp_data/"))
   setwd(as.character(links.out.df$month[s]))
   
   incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
@@ -231,18 +233,12 @@ for (s in 1:nrow(links.out.df)){
   nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.xls"),
                                 sheet = "IS Provider",skip=13)
   
-  #Any new ones in 'incomplete' files?
-  
-  #s=1
-  #codes_inc <- c(incomplete$`Provider Code`,incompleteDTA$`Provider Code`,"XXYYXX")
-  #codes_old <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`)
-  #codes_inc[which((codes_inc %in% codes_old)==FALSE)]
+  #IS providers
   
   codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`,
              incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
   names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,
              incomplete$`Provider Name`,incompleteDTA$`Provider Name`)
-  
   summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names)
   
   if (s==1) {
@@ -257,22 +253,24 @@ for (s in 1:nrow(links.out.df)){
 IS_providers_allmonths <- storage[!duplicated(storage), ]
 
 #Save
-setwd(rawdatadir)
-fwrite(IS_providers_allmonths, file = paste0(rawdatadir,"/Clean/IS_providers_allmonths.csv"), sep = ",")
+setwd(paste0(R_workbench,"/RTT_temp_data/"))
+fwrite(IS_providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
+                                             "/IS_providers_allmonths.csv"), sep = ",")
 
 ########################################################################################
 ################### Append all monthly waiting times files into one ####################
 ########################################################################################
 
 #Re-load IS provider by month
-IS_providers_allmonths <- fread(paste0(rawdatadir,"/Clean/IS_providers_allmonths.csv"), header=TRUE, sep=",", check.names=T)
+IS_providers_allmonths <- fread(paste0(R_workbench,"/RTT_temp_data/",
+                                       "/IS_providers_allmonths.csv"),header=TRUE, sep=",", check.names=T)
 
 for (j in 1:nrow(links.out.df)){
   
-  setwd(rawdatadir)
+  setwd(paste0(R_workbench,"/RTT_temp_data/"))
   setwd(as.character(links.out.df$month[j]))
-  
-  file.name <- list.files()[str_detect(list.files(),"full-extract")]
+
+  file.name <- list.files()[str_detect(list.files(),"full-extract")][1] #To make sure there's only one file - is it the right one?
   
   RTT_month <- fread(file.name, header=TRUE, sep=",", check.names=T)
   
@@ -290,5 +288,5 @@ for (j in 1:nrow(links.out.df)){
 }
 
 #Save
-setwd(rawdatadir)
-fwrite(storage.rtt, file = paste0(rawdatadir,"/Clean/RTT_allmonths.csv"), sep = ",")
+setwd(paste0(R_workbench,"/RTT_temp_data/"))
+fwrite(storage.rtt, file = "RTT_allmonths.csv", sep = ",")
