@@ -2,7 +2,7 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Scrape addresses of files
+#Only download files that are missing
 
 ##############################################
 ################### SETUP ####################
@@ -10,70 +10,117 @@
 
 ###### Libraries ######
 
-if (!require("pacman")) install.packages("pacman")
-
-pacman::p_load(RSelenium, seleniumPipes, tidyverse,dplyr,rvest,downloader,
-               stringr,qdapRegex,tidyr,purrr,pbapply,data.table,readr,readxl)
+library(tidyverse)
+library(rvest)
+library(downloader)
+library(stringr)
+library(qdapRegex)
+library(tidyr)
+library(purrr)
+library(pbapply)
+library(data.table)
+library(readr)
+library(readxl)
+library(aws.s3)
 
 rm(list = ls()) #Clear the working environment
 
-rawdatadir <- "M:/Analytics/Elective waiting times data"
+#Directories
+
+IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
+RTT_subfolder <- "RTT waiting times data"
+R_workbench <- dirname(getwd())
+
+#Create folder in workbench for temporary files
+
+setwd(R_workbench)
+temp_folder <- "RTT_temp_data"
+if (file.exists(temp_folder)) {
+  cat("The folder already exists")
+} else {
+  dir.create(temp_folder)
+}
 
 #####################################################
 ################### Web-scraping ####################
 #####################################################
 
+#2020-2021
+months2122 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
+years2122 <- c(rep(21,9),rep(22,3))
+series2122 <- rep(2122,length(months2122))
+input2122 <- cbind.data.frame(month=paste0(months2122,years2122),series=series2122)
+rm(months2122,years2122,series2122)
+
 #2019-2020
-months2021 <- c("Apr","May","Jun","Jul","Aug")
-years2021 <- c(rep(20,length(months2021)))
+months2021 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
+years2021 <- c(rep(20,9),rep(21,3))
 series2021 <- rep(2021,length(months2021))
 input2021 <- cbind.data.frame(month=paste0(months2021,years2021),series=series2021)
+rm(months2021,years2021,series2021)
 
 #2019-2020
 months1920 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
 years1920 <- c(rep(19,9),rep(20,3))
-series1920 <- rep(1920,12)
+series1920 <- rep(1920,length(months1920))
 input1920 <- cbind.data.frame(month=paste0(months1920,years1920),series=series1920)
+rm(months1920,years1920,series1920)
 
 #2018-2019
 months1819 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
 years1819 <- c(rep(18,9),rep(19,3))
-series1819 <- rep(1819,12)
+series1819 <- rep(1819,length(months1819))
 input1819 <- cbind.data.frame(month=paste0(months1819,years1819),series=series1819)
+rm(months1819,years1819,series1819)
 
 #All together
 
-inputs <- plyr::rbind.fill(input2021,input1920,input1819)
+inputs <- plyr::rbind.fill(input2122,input2021,input1920,input1819)
+rm(input2122,input2021,input1920,input1819)
 
 #Function that reports links to 3 files for each month
 
 return_links_rtt <- function(month,series){
   
-  if (series=="2021"){
+  #Find landing page for the appropriate financial year
+  
+  if (series=="2122"){
+    read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2021-22/")
+  } else if (series=="2021"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2020-21/")
-  } else if (series=="1920"){
+  } else if (series=="1920") {
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2019-20/")
   } else if (series=="1819") {
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2018-19/")
   }
   
+  #This expression will extract all links associated with any text that contains the name of the month (e.g. "Jan")
+  #See xpath cheat sheet here 'https://cheatography.com/alexsiminiuc/cheat-sheets/xpath/'
+  #Or tutorial here 'https://levelup.gitconnected.com/master-the-art-of-writing-xpath-for-web-scraping-c14e2f7ee130'
+  
   xpath_month <- paste0("//a[contains(text(),'",month,"')]/@href")
+  
+  #These are all the links associated with this given month
   
   links <- read.first.page %>%
     html_nodes(xpath=xpath_month) %>%
     html_text()
   
+  #We're only interested in 5 of those files
+  
+  #ZIP
   full.csv.link <- links[str_detect(links, "Full-CSV")][1]
   
+  #Provider-level files
   providers.link.incomp <- links[str_detect(links, "Incomplete-Provider")][1]
-  
+  providers.link.adm <- links[str_detect(links, "Admitted-Provider")][1]
+  providers.link.nonadm <- links[str_detect(links, "NonAdmitted-Provider")][1]
   providers.link.new <- links[str_detect(links, "New-Periods-Provider")][1]
   
-  providers.link.adm <- links[str_detect(links, "Admitted-Provider")][1]
-  
-  providers.link.nonadm <- links[str_detect(links, "NonAdmitted-Provider")][1]
-  
-  out <- data.frame(month=month,full.csv.link,
+  #Data frame of files to download
+  out <- data.frame(month=month,
+                    series=series,
+                    full.csv.link,
                     providers.link.incomp,
                     providers.link.new,
                     providers.link.adm,
@@ -83,47 +130,81 @@ return_links_rtt <- function(month,series){
   
 }
 
-#Apply for all months to get all links
+#Example
+#return_links_rtt("Jul","2122")
+
+#Apply for all months to get all links, and store there is 'links.out.df'
 
 links.out <- mapply(return_links_rtt,
                     month=inputs$month,
                     series = inputs$series)
+links.out.df <- as.data.frame(t(links.out)) %>%
+  filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet
+rm(links.out)
 
-links.out.df <- as.data.frame(t(links.out))
+links.out.df <- head(links.out.df,n=5)
 
 ###########################################################
 ################### Download all files ####################
 ###########################################################
 
+#dummy <- data.frame(var1=as.character(1:100))
+# s3write_using(dummy # What R object we are saving
+#               , FUN = write.csv # Which R function we are using to save
+#               , object = 'RTT waiting times data/dummy.csv' # Name of the file to save to (include file type)
+#               , bucket = "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp") # Bucket name defined above
+# 
+
 for (k in 1:nrow(links.out.df)){
   
-  #Create directory
-  setwd(rawdatadir)
-  dir.create(as.character(links.out.df$month[k]))
-  setwd(as.character(links.out.df$month[k]))
+  #Create sub-folder in S3
+  # put_folder(paste0(RTT_subfolder,"/",as.character(links.out.df$month[k])),
+  #            bucket = IHT_bucket)
+
+  ### Full CSV
   
-  #Download Full CSV
+  #Download Full CSV in workbench
   download(as.character(links.out.df$full.csv.link[k]),
-           dest=paste0(links.out.df$month[k],".zip"), mode="wb")
+           dest=paste0("RTT_temp_data/",links.out.df$month[k],".zip"), mode="wb")
+
+  #Unzip Full CSV in workbench
+  unzip(paste0("RTT_temp_data/",links.out.df$month[k],".zip"),
+        exdir = paste0("RTT_temp_data/",links.out.df$month[k]))
   
-  #Unzip Full CSV
-  unzip(paste0(links.out.df$month[k],".zip"), exdir = '.')
+  #Delete zip file
+  file.remove(paste0("RTT_temp_data/",links.out.df$month[k],".zip"))
+
+  ### New providers
   
   #Download New Providers
   download(as.character(links.out.df$providers.link.new[k]),
-           dest=paste0(links.out.df$month[k],"-newproviders.xls"), mode="wb")
+           dest=paste0("RTT_temp_data/",
+                       paste(links.out.df$month[k]),"/",
+                       links.out.df$month[k],"-newproviders.xls"), mode="wb")
+  
+  ### Admitted providers
   
   #Download Admitted Providers
   download(as.character(links.out.df$providers.link.adm[k]),
-           dest=paste0(links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
+           dest=paste0("RTT_temp_data/",
+                       paste(links.out.df$month[k]),"/",
+                       links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
+  
+  ### Non-admitted providers
   
   #Download Non-Admitted Providers
   download(as.character(links.out.df$providers.link.nonadm[k]),
-           dest=paste0(links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
+           dest=paste0("RTT_temp_data/",
+                       paste(links.out.df$month[k]),"/",
+                       links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
+  
+  ### Incomplete providers
   
   #Download Incomplete Providers
   download(as.character(links.out.df$providers.link.incomp[k]),
-           dest=paste0(links.out.df$month[k],"-providers-incomplete.xls"), mode="wb")  
+           dest=paste0("RTT_temp_data/",
+                       paste(links.out.df$month[k]),"/",
+                       links.out.df$month[k],"-providers-incomplete.xls"), mode="wb")
 }
 
 ###########################################################################
@@ -211,21 +292,3 @@ for (j in 1:nrow(links.out.df)){
 #Save
 setwd(rawdatadir)
 fwrite(storage.rtt, file = paste0(rawdatadir,"/Clean/RTT_allmonths.csv"), sep = ",")
-
-##############################################################
-################### Alternative: Selenium ####################
-##############################################################
-
-# driver$server$stop()
-# 
-# system("taskkill /im java.exe /f", intern=FALSE, ignore.stdout=FALSE)
-# 
-# ### Open the page
-# 
-# binman::list_versions("chromedriver")
-# 
-# driver <- rsDriver(browser=c("chrome"), chromever="85.0.4183.83")
-# 
-# remote_driver <- driver[["client"]]
-# 
-# remote_driver$navigate("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2020-21/")
