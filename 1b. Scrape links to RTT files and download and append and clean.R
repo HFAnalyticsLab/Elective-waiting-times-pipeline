@@ -2,14 +2,11 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Why is final upload not working?
 #Delete temporary files along the way
-#Only download files that aren't already there
 #Use s3sync() to sync into a bucket when ready
-#push code
 #delete file 1a and file 2 from AWS branch
 
-#Useful AWS functions
+#Other useful AWS functions
 
 #dummy <- data.frame(var1=as.character(1:100))
 # s3write_using(dummy # What R object we are saving
@@ -28,6 +25,7 @@
 
 ###### Libraries ######
 
+#Some of these might not be needed
 library(tidyverse)
 library(rvest)
 library(downloader)
@@ -157,17 +155,21 @@ links.out <- mapply(return_links_rtt,
                     month=inputs$month,
                     series = inputs$series)
 links.out.df <- as.data.frame(t(links.out)) %>%
-  filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet
-rm(links.out)
+  filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet or don't exist
+rm(inputs,links.out)
 
-#links.out.df <- head(links.out.df,n=5) #For now, check that it works for the first 5 months
+#links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 5 months
 
 ###########################################################
 ################### Download all files ####################
 ###########################################################
 
-already_there <- list.dirs(path = "RTT_temp_data", full.names = TRUE, recursive = TRUE) %>%
-  str_replace_all(.,"RTT_temp_data/","")
+#Which months have we already downloaded locally?
+
+already_there <- list.dirs(path = temp_folder, full.names = TRUE, recursive = TRUE) %>%
+  str_replace_all(.,paste0(temp_folder,"/"),"")
+
+#Download a set of files for each month (unless already there locally)
 
 for (k in 1:nrow(links.out.df)){
   
@@ -221,6 +223,9 @@ if (links.out.df$month[k] %in% already_there){
   }
 }
 
+#Clean up files
+rm(already_there)
+
 ###########################################################################
 ################### Append all provider files into one ####################
 ###########################################################################
@@ -229,7 +234,7 @@ for (s in 1:nrow(links.out.df)){
   
   #Open all provider files for one month and append
 
-  setwd(paste0(R_workbench,"/RTT_temp_data/"))
+  setwd(paste0(R_workbench,"/",temp_folder,"/"))
   setwd(as.character(links.out.df$month[s]))
   
   incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
@@ -254,6 +259,9 @@ for (s in 1:nrow(links.out.df)){
   names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,
              incomplete$`Provider Name`,incompleteDTA$`Provider Name`)
   summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names)
+  rm(incomplete,incompleteDTA,new_provider,adm_provider,nonadm_provider,codes,names)
+  
+  #Successively append files
   
   if (s==1) {
     storage <- summary_month
@@ -264,58 +272,70 @@ for (s in 1:nrow(links.out.df)){
 
 #Remove duplicates
 IS_providers_allmonths <- storage[!duplicated(storage), ]
+rm(storage,summary_month)
 
 #Save
-setwd(paste0(R_workbench,"/RTT_temp_data/"))
+setwd(paste0(R_workbench,"/",temp_folder,"/"))
 fwrite(IS_providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
                                              "/IS_providers_allmonths.csv"), sep = ",")
+rm(IS_providers_allmonths)
 
 ########################################################################################
 ################### Append all monthly waiting times files into one ####################
 ########################################################################################
 
 #Re-load IS provider by month
-IS_providers_allmonths <- fread(paste0(R_workbench,"/RTT_temp_data/",
-                                       "/IS_providers_allmonths.csv"),header=TRUE, sep=",", check.names=T)
+
+IS_providers_allmonths <- fread(paste0(R_workbench,"/",temp_folder,"/IS_providers_allmonths.csv"),
+                                header=TRUE, sep=",", check.names=T)
+
+#Append all files
 
 for (j in 1:nrow(links.out.df)){
   
-  setwd(paste0(R_workbench,"/RTT_temp_data/"))
+  setwd(paste0(R_workbench,"/",temp_folder,"/"))
   setwd(as.character(links.out.df$month[j]))
 
+  #Find name of large CSV
   file.name <- list.files()[str_detect(list.files(),"full-extract")][1] #To make sure there's only one file - is it the right one?
   
+  #Read in
   RTT_month <- fread(file.name, header=TRUE, sep=",", check.names=T)
+  rm(file.name)
   
+  #Add month-year indicator
   RTT_month$monthyr <- as.character(links.out.df$month[j])
   
   #New indicator variable to flag independent providers
   RTT_month$IS_provider <- ifelse(RTT_month$Provider.Org.Code %in% filter(IS_providers_allmonths,monthyr==links.out.df$month[j])$codes,1,0)
   
+  #Successively append files
   if (j==1) {
     storage.rtt <- RTT_month
   } else {
     storage.rtt <- plyr::rbind.fill(storage.rtt,RTT_month)
   }
-  
 }
 
 #Save
-setwd(paste0(R_workbench,"/RTT_temp_data/"))
+setwd(paste0(R_workbench,"/",temp_folder,"/"))
 fwrite(storage.rtt, file = "RTT_allmonths.csv", sep = ",")
+
+#Clean up files
+rm(links.out.df,IS_providers_allmonths,RTT_month,storage.rtt)
 
 #######################################################################
 ################### Sync local folder to S3 bucket ####################
 #######################################################################
 
-setwd(paste0(R_workbench,"/RTT_temp_data/"))
+setwd(paste0(R_workbench,"/",temp_folder,"/"))
 
 put_object(file = 'RTT_allmonths.csv',
-           object = 'RTT waiting times data/RTT_allmonths.csv',
+           object = paste0(RTT_subfolder,"/","RTT_allmonths.csv"),
            bucket = IHT_bucket, show_progress = TRUE,
            mulitpart=TRUE)
 
 put_object(file = 'IS_providers_allmonths.csv',
-           object = 'RTT waiting times data/IS_providers_allmonths.csv',
+           object = paste0(RTT_subfolder,"/","IS_providers_allmonths.csv"),
            bucket = IHT_bucket, show_progress = TRUE,
            mulitpart=TRUE)
