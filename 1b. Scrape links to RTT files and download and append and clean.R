@@ -51,10 +51,19 @@ R_workbench <- path.expand("~")
 
 setwd(R_workbench)
 temp_folder <- "RTT_temp_data"
+
+#Main folder
 if (file.exists(temp_folder)) {
   cat("The folder already exists")
 } else {
   dir.create(temp_folder)
+}
+
+#Folder for temp files
+if (file.exists(paste0(temp_folder,"/temp files"))) {
+  cat("The folder already exists")
+} else {
+  dir.create(paste0(temp_folder,"/temp files"))
 }
 
 #####################################################
@@ -158,7 +167,7 @@ links.out.df <- as.data.frame(t(links.out)) %>%
   filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet or don't exist
 rm(inputs,links.out)
 
-#links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 5 months
+#links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 3 months
 
 ###########################################################
 ################### Download all files ####################
@@ -166,8 +175,8 @@ rm(inputs,links.out)
 
 #Which months have we already downloaded locally?
 
-already_there <- list.dirs(path = temp_folder, full.names = TRUE, recursive = TRUE) %>%
-  str_replace_all(.,paste0(temp_folder,"/"),"")
+already_there <- list.dirs(path = paste0(temp_folder,"/temp files"), full.names = TRUE, recursive = TRUE) %>%
+  str_replace_all(.,paste0(temp_folder,"/temp files/"),"")
 
 #Download a set of files for each month (unless already there locally)
 
@@ -182,18 +191,18 @@ if (links.out.df$month[k] %in% already_there){
     
     #Download Full CSV in workbench
     download(as.character(links.out.df$full.csv.link[k]),
-             dest=paste0("RTT_temp_data/",links.out.df$month[k],".zip"), mode="wb")
+             dest=paste0("RTT_temp_data/temp files/",links.out.df$month[k],".zip"), mode="wb")
     #Unzip Full CSV in workbench
-    unzip(paste0("RTT_temp_data/",links.out.df$month[k],".zip"),
-          exdir = paste0("RTT_temp_data/",links.out.df$month[k]))
+    unzip(paste0("RTT_temp_data/temp files/",links.out.df$month[k],".zip"),
+          exdir = paste0("RTT_temp_data/temp files/",links.out.df$month[k]))
     #Delete zip file
-    file.remove(paste0("RTT_temp_data/",links.out.df$month[k],".zip"))
+    file.remove(paste0("RTT_temp_data/temp files/",links.out.df$month[k],".zip"))
     
     ### New providers
     
     #Download New Providers
     download(as.character(links.out.df$providers.link.new[k]),
-             dest=paste0("RTT_temp_data/",
+             dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
                          links.out.df$month[k],"-newproviders.xls"), mode="wb")
     
@@ -201,7 +210,7 @@ if (links.out.df$month[k] %in% already_there){
     
     #Download Admitted Providers
     download(as.character(links.out.df$providers.link.adm[k]),
-             dest=paste0("RTT_temp_data/",
+             dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
                          links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
     
@@ -209,7 +218,7 @@ if (links.out.df$month[k] %in% already_there){
     
     #Download Non-Admitted Providers
     download(as.character(links.out.df$providers.link.nonadm[k]),
-             dest=paste0("RTT_temp_data/",
+             dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
                          links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
     
@@ -217,7 +226,7 @@ if (links.out.df$month[k] %in% already_there){
     
     #Download Incomplete Providers
     download(as.character(links.out.df$providers.link.incomp[k]),
-             dest=paste0("RTT_temp_data/",
+             dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
                          links.out.df$month[k],"-providers-incomplete.xls"), mode="wb") 
   }
@@ -234,7 +243,7 @@ for (s in 1:nrow(links.out.df)){
   
   #Open all provider files for one month and append
 
-  setwd(paste0(R_workbench,"/",temp_folder,"/"))
+  setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
   setwd(as.character(links.out.df$month[s]))
   
   incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
@@ -293,8 +302,11 @@ IS_providers_allmonths <- fread(paste0(R_workbench,"/",temp_folder,"/IS_provider
 
 for (j in 1:nrow(links.out.df)){
   
-  setwd(paste0(R_workbench,"/",temp_folder,"/"))
+  setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
   setwd(as.character(links.out.df$month[j]))
+  
+  #Display progress
+  #cat(links.out.df$month[j]))
 
   #Find name of large CSV
   file.name <- list.files()[str_detect(list.files(),"full-extract")][1] #To make sure there's only one file - is it the right one?
@@ -323,6 +335,13 @@ fwrite(storage.rtt, file = "RTT_allmonths.csv", sep = ",")
 
 #Clean up files
 rm(links.out.df,IS_providers_allmonths,RTT_month,storage.rtt)
+
+#################################################################
+################### Delete temporary folders ####################
+#################################################################
+
+setwd(paste0(R_workbench,"/",temp_folder,"/"))
+unlink("temp files",recursive=TRUE)
 
 #######################################################################
 ################### Sync local folder to S3 bucket ####################
