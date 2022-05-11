@@ -3,7 +3,6 @@
 ##########################################################
 
 #There are probably faster ways to reproduce dashboard metrics than using custom-written functions
-#Check if stats are still the same as in the current dashboard (i.e. functions still work)
 
 ##############################################
 ################### SETUP ####################
@@ -65,6 +64,11 @@ RTT_allmonths <- RTT_allmonths %>%
     TRUE ~ "NA"
   ))
 
+#### Clean up specialty names
+
+RTT_allmonths <- RTT_allmonths %>%
+  mutate(.,Treatment.Function.Name=str_replace_all(Treatment.Function.Name," Service",""))
+
 #### Capture names of providers and specialties
 
 all_months <- RTT_allmonths %>%
@@ -97,6 +101,12 @@ pathways <- c("incomplete","completeadmitted","completenonadmitted","newRTT","in
 ###############################################################################
 
 ############### By provider
+
+# monthyear="Feb22"
+# provider="ENGLAND"
+# specialty="Total"
+# quantiles=c(0.50)
+# type="incomplete"
 
 dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type){
   
@@ -139,6 +149,12 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
                            Commissioner.Org.Code!="NONC")
   }
   
+  #Is it an IS provider (that month)?
+  
+  IS_provider <- ifelse(provider=="ENGLAND",
+                        0,
+                        max(datasubset$IS_provider))
+  
   #Aggregate rows and compute total patients
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
@@ -147,8 +163,10 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #But medians (and other stats) are computed using only the subset of patients
     #with a known start state
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      select(.,Treatment.Function.Name:Total) %>%
+      select(.,-c("Treatment.Function.Name","Total")) %>%
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(dplyr::across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -163,7 +181,9 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #AND medians (and other stats) are also computed using only the subset of patients
     #with a known start state
     
-    datasubset_sum <- datasubset %>% 
+    datasubset_sum <- datasubset %>%
+      select(.,Treatment.Function.Name:Total) %>%
+      select(.,-c("Treatment.Function.Name","Total")) %>%
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -193,7 +213,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
@@ -206,7 +226,8 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:53,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -216,6 +237,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     
     output <- data.frame(monthyear=as.character(monthyear),
                          provider=as.character(provider),
+                         IS=as.character(IS_provider),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          total.patients=total,
@@ -237,6 +259,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     
     output <- data.frame(monthyear=as.character(monthyear),
                          provider=as.character(provider),
+                         IS=as.character(IS_provider),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          total.patients=total,
@@ -251,10 +274,10 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
 }
 
 #Example
-dashboard_stats_provider(monthyear="Apr21",
-                         provider="ENGLAND",
+dashboard_stats_provider(monthyear="Feb22",
+                         provider="DARTFORD AND GRAVESHAM NHS TRUST",
                          specialty="Total",
-                         quantiles=c(0.95,0.50),
+                         quantiles=c(0.50,0.95),
                          type="incomplete")
 
 ############### By CCG
@@ -323,8 +346,10 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      select(.,Treatment.Function.Name:Total) %>%
+      select(.,-c("Treatment.Function.Name","Total")) %>%
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -335,8 +360,10 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
     
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      select(.,Treatment.Function.Name:Total) %>%
+      select(.,-c("Treatment.Function.Name","Total")) %>%
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
     
@@ -360,7 +387,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
@@ -373,7 +400,8 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:53,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -418,9 +446,9 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
 }
 
 #Example
-dashboard_stats_ccg(monthyear="Apr21",
+dashboard_stats_ccg(monthyear="Feb22",
                     ccg_code="ENGLAND",
                     specialty="Total",
-                    quantiles=c(0.50),
+                    quantiles=c(0.50,0.92),
                     type="incomplete",
                     independent=2)
