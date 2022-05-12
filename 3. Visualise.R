@@ -1,6 +1,7 @@
 
 library(ggplot2)
 library(data.table)
+library(ggpubr)
 
 ## Basic time series analysis and visualisation
 plot_RTT <- function(provider = 'ENGLAND',
@@ -83,12 +84,12 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                                 substr(result$monthyear, 4, 5)),
                          format = '%d-%b-%y')
   
-  p <- ggplot(result, aes(x = date, y = total.patients, colour = independent)) +
+  p <- ggplot(result, aes(x = date, y = total.patients / 1000, colour = independent)) +
     geom_line() +
     ggtitle(chart_title) +
     theme_classic()
 
-  q <- ggplot(result, aes(x = date, y = number.18.or.less, colour = independent)) +
+  q <- ggplot(result, aes(x = date, y = number.18.or.less / 1000, colour = independent)) +
     geom_line() +
     ggtitle(chart_title) +
     theme_classic()
@@ -103,7 +104,8 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     ggtitle(chart_title) +
     theme_classic()
   
-  plot <- ggpubr::ggarrange(p, q, r, s, common.legend = TRUE, legend = 'bottom')
+  plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'right') %>%
+  annotate_figure(., top = text_grob(paste0('All patients ', specialty, ' , pathway: ', type)))
   
   return(plot)
 }
@@ -111,4 +113,11 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
 plot_RTT_comp(specialty = 'Total', type = 'incomplete')
 plot_RTT_comp(specialty = 'Total', type = 'completeadmitted')
 plot_RTT_comp(specialty = 'Total', type = 'completenonadmitted')
+plot_RTT_comp(specialty = 'Total', type = 'incompleteDTA')
+plot_RTT_comp(specialty = 'Total', type = 'newRTT')
 
+plot_RTT_comp(specialty = 'Cardiology', type = 'incomplete')
+plot_RTT_comp(specialty = 'Cardiology', type = 'completeadmitted')
+plot_RTT_comp(specialty = 'Cardiology', type = 'completenonadmitted')
+plot_RTT_comp(specialty = 'Cardiology', type = 'incompleteDTA')
+plot_RTT_comp(specialty = 'Cardiology', type = 'newRTT')
