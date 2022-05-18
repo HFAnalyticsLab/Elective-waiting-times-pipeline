@@ -118,11 +118,11 @@ pathways <- c("incomplete","completeadmitted","completenonadmitted","newRTT","in
 
 dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type){
   
-  monthyear="Jan19"
-  provider="ENGLAND"
-  specialty="Total"
-  quantiles=c(0.50)
-  type="incomplete"
+  # monthyear="Jan19"
+  # provider="ENGLAND"
+  # specialty="Total"
+  # quantiles=c(0.50)
+  # type="incomplete"
   
   #Pick relevant month-year
   
