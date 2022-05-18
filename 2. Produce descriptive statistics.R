@@ -38,7 +38,9 @@ sumnarm <- function(x) { sum(x,na.rm=TRUE) }
 ################### Import CCG-level deprivation data and geo lookup ##############
 ###################################################################################
 
-#Needs to be produced again (2022)
+IMD_by_CCG_wide <- s3read_using(fread
+                              , object = paste0(RTT_subfolder,"/","IMD_by_CCG_wide.csv") # File to open
+                              , bucket = IHT_bucket) # Bucket name defined above
 
 #############################################################
 ################### Import monthly RTT data #################
