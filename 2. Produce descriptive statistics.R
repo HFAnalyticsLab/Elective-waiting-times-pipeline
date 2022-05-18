@@ -41,6 +41,7 @@ R_workbench <- path.expand("~")
 #Useful functions
 only_letters <- function(x) { gsub("^([[:alpha:]]*).*$","\\1",x) }
 sumnarm <- function(x) { sum(x,na.rm=TRUE) }
+not_all_na <- function(x) any(!is.na(x))
 
 #######################################################################################
 ################### Import CCG-level deprivation data and region lookups ##############
@@ -118,7 +119,7 @@ pathways <- c("incomplete","completeadmitted","completenonadmitted","newRTT","in
 
 dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type){
   
-  # monthyear="Jan19"
+  # monthyear="Dec18"
   # provider="ENGLAND"
   # specialty="Total"
   # quantiles=c(0.50)
@@ -128,6 +129,13 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear)
   
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    select(starts_with("Gt")) %>%
+    select(where(not_all_na)) %>%
+    names(.)
+    
   #If provider is England, use all rows and all providers
   
   dataset$Provider.Org.Name <- ifelse(rep(provider,nrow(dataset))=="ENGLAND",
@@ -178,8 +186,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #with a known start state
     
     datasubset_sum <-  datasubset %>%
-      select(.,Treatment.Function.Name:Total) %>%
-      select(.,-c("Treatment.Function.Name","Total")) %>%
+      select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -195,9 +202,8 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #AND medians (and other stats) are also computed using only the subset of patients
     #with a known start state
     
-    datasubset_sum <- datasubset %>%
-      select(.,Treatment.Function.Name:Total) %>%
-      select(.,-c("Treatment.Function.Name","Total")) %>%
+    datasubset_sum <-  datasubset %>%
+      select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -288,7 +294,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
 }
 
 #Example
-dashboard_stats_provider(monthyear="Jan19",
+dashboard_stats_provider(monthyear="Feb22",
                          provider="ENGLAND",
                          specialty="Total",
                          quantiles=c(0.50,0.95),
@@ -303,6 +309,13 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   #Pick relevant month-year and filter out private patients
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    select(starts_with("Gt")) %>%
+    select(where(not_all_na)) %>%
+    names(.)
   
   #If CCG is England, use all rows and all CCGs
   
@@ -361,8 +374,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
     datasubset_sum <- datasubset %>%
-      select(.,Treatment.Function.Name:Total) %>%
-      select(.,-c("Treatment.Function.Name","Total")) %>%
+      select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -375,8 +387,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
     datasubset_sum <- datasubset %>%
-      select(.,Treatment.Function.Name:Total) %>%
-      select(.,-c("Treatment.Function.Name","Total")) %>%
+      select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
