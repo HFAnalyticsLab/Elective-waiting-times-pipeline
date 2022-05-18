@@ -2,6 +2,14 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
+#When looking at time series and using IMD/Region splits, careful because these are CCG-based (e.g. CCGs in 2020) and
+#the number of providers will get lower when you go back in time (further from 2020)
+#because the CCGs didn't exist back then
+
+#Proportion 52 weeks or more, why 0% before ~March 2021?
+
+#Chart chart of IS/non-IS by specialty?
+
 #There are probably faster ways to reproduce dashboard metrics than using custom-written functions
 
 ##############################################
@@ -34,13 +42,17 @@ R_workbench <- path.expand("~")
 only_letters <- function(x) { gsub("^([[:alpha:]]*).*$","\\1",x) }
 sumnarm <- function(x) { sum(x,na.rm=TRUE) }
 
-###################################################################################
-################### Import CCG-level deprivation data and geo lookup ##############
-###################################################################################
+#######################################################################################
+################### Import CCG-level deprivation data and region lookups ##############
+#######################################################################################
 
 IMD_by_CCG_wide <- s3read_using(fread
                               , object = paste0(RTT_subfolder,"/","IMD_by_CCG_wide.csv") # File to open
                               , bucket = IHT_bucket) # Bucket name defined above
+
+Region_by_CCG_wide <- s3read_using(fread
+                                , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_wide.csv") # File to open
+                                , bucket = IHT_bucket) # Bucket name defined above
 
 #############################################################
 ################### Import monthly RTT data #################
@@ -104,13 +116,13 @@ pathways <- c("incomplete","completeadmitted","completenonadmitted","newRTT","in
 
 ############### By provider
 
-# monthyear="Feb22"
-# provider="ENGLAND"
-# specialty="Total"
-# quantiles=c(0.50)
-# type="incomplete"
-
 dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type){
+  
+  monthyear="Jan19"
+  provider="ENGLAND"
+  specialty="Total"
+  quantiles=c(0.50)
+  type="incomplete"
   
   #Pick relevant month-year
   
@@ -165,7 +177,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #But medians (and other stats) are computed using only the subset of patients
     #with a known start state
     
-    datasubset_sum <- datasubset %>%
+    datasubset_sum <-  datasubset %>%
       select(.,Treatment.Function.Name:Total) %>%
       select(.,-c("Treatment.Function.Name","Total")) %>%
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
@@ -228,7 +240,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_less <- datasubset_sum[1:53,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
     number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
@@ -276,8 +288,8 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
 }
 
 #Example
-dashboard_stats_provider(monthyear="Feb22",
-                         provider="DARTFORD AND GRAVESHAM NHS TRUST",
+dashboard_stats_provider(monthyear="Jan19",
+                         provider="ENGLAND",
                          specialty="Total",
                          quantiles=c(0.50,0.95),
                          type="incomplete")
@@ -402,7 +414,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_less <- datasubset_sum[1:53,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
     number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     

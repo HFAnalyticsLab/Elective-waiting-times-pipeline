@@ -2,13 +2,13 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Dynamic or static approach
+#Dynamic or static approach to lookups?
+
+#EXTERNAL RESOURCES TO GET POSTCODES
 
 #https://geoportal.statistics.gov.uk/search?collection=Dataset&sort=name&tags=all(LUP_LSOA_CCG_LAD)
-
 #https://healthgps.co.uk/
 #has org codes and addresses
-
 #or use https://www.linkedin.com/pulse/using-data-from-google-r-studio-caleb-aguiar
 #Google API
 #or OMS
@@ -160,4 +160,64 @@ IMD_by_CCG_wide <- IMD_by_CCG_long %>%
 s3write_using(IMD_by_CCG_wide # What R object we are saving
               , FUN = write.csv # Which R function we are using to save
               , object = paste0(RTT_subfolder,"/","IMD_by_CCG_wide.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+##############################################################
+################### Mapping CCGs to NHS Regions ##############
+##############################################################
+
+#Load LSOA to CCG lookups
+
+CCG_to_REG21 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England_(Region)_(April_2021)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2021") %>% rename(., CCGCDH=CCG21CDH,NHSERNM=NHSER21NM,STPNM=STP21NM)
+
+CCG_to_REG20 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England__Region___April_2020__Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2020") %>% rename(., CCGCDH=CCG20CDH,NHSERNM=NHSER20NM,STPNM=STP20NM)
+
+CCG_to_REG19 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2019") %>% rename(., CCGCDH=CCG19CDH,NHSERNM=NHSER19NM) #No STPs in 2019 and back
+
+CCG_to_REG18 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2018)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2018") %>% rename(., CCGCDH=CCG18CDH,NHSERNM=NHSER18NM)
+
+#2017 lookup doesn't have the CCG codes we need
+# CCG_to_REG17 <-  s3read_using(fread
+#                               , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2017)_Lookup_in_England_(Version_3).csv") # File to open
+#                               , bucket = IHT_bucket)
+
+#Join all CCG lookups
+
+#Long format
+CCG_NHSER_joined_long <- CCG_to_REG21 %>%
+  select(.,CCGCDH,ccg_year, NHSERNM,STPNM) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG20,CCGCDH,ccg_year, NHSERNM,STPNM)) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG19,CCGCDH,ccg_year, NHSERNM)) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG18,CCGCDH,ccg_year, NHSERNM))
+
+#Wide format
+CCG_NHSER_joined_wide <- CCG_NHSER_joined_long %>%
+  pivot_wider( names_from = ccg_year,
+               names_sep = "_",
+               values_from = c(NHSERNM,STPNM))
+
+#######################################
+################### Save ##############
+#######################################
+
+s3write_using(CCG_NHSER_joined_long # What R object we are saving
+              , FUN = write.csv # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_long.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+s3write_using(CCG_NHSER_joined_wide # What R object we are saving
+              , FUN = write.csv # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_wide.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
