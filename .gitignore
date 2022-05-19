@@ -3,6 +3,6 @@
 .RData
 .Ruserdata
 .Rproj
-.csv
-.png
+*.csv
+*.png
 API keys.R
