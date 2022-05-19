@@ -34,15 +34,20 @@ plot_RTT <- function(provider = 'ENGLAND',
   p <- ggplot(result, aes(x = date, y = total.patients)) +
     geom_line() +
     ggtitle(chart_title)
-
+ # abline(v = as.Date('2020-03-26'))
+  
   return(p)
 }
 
-plot_RTT(specialty = 'Total', type = 'incomplete')
+plot_RTT(specialty = 'Total', type = 'incomplete',
+         chart_title = 'Total patients on incomplete pathways')
 
-plot_RTT(specialty = 'Total', type = 'completeadmitted')
+plot_RTT(specialty = 'Total', type = 'completeadmitted',
+         chart_title = 'Total patients on completed pathways that have been admitted')
 
-plot_RTT(specialty = 'Total', type = 'completenonadmitted')
+plot_RTT(specialty = 'Total', type = 'completenonadmitted',
+         chart_title = 'Total patients on completed pathways that have been admitted')
+
 
 plot_RTT(specialty = 'Rheumatology', type = 'incomplete')
 
@@ -105,7 +110,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     theme_classic()
   
   plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'right') %>%
-  annotate_figure(., top = text_grob(paste0('All patients ', specialty, ' , pathway: ', type)))
+  annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type)))
   
   return(plot)
 }
