@@ -3,5 +3,5 @@
 .RData
 .Ruserdata
 .Rproj
-*.csv
-*.png
+.csv
+API keys.R
