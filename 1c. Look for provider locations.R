@@ -27,6 +27,7 @@ library(readxl)
 library(janitor)
 library(aws.s3)
 library(googleway)
+library(rgdal)
 
 #Clean up the global environment
 
@@ -37,9 +38,11 @@ rm(list = ls())
 IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
 RTT_subfolder <- "RTT waiting times data"
 R_workbench <- path.expand("~")
+git_directory <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 #Google Maps API
 
+setwd(git_directory)
 source("API keys.R")
 
 #####################################################
@@ -239,3 +242,42 @@ s3write_using(Google_all_rounds_nodup # What R object we are saving
               , FUN = fwrite # Which R function we are using to save
               , object = paste0(RTT_subfolder,"/Locating providers/","RTT provider locations from Google Maps.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
+
+##############################################################
+################### Map locations to MSOA ####################
+##############################################################
+
+#Projection codes
+ukgrid = "+init=epsg:27700"
+latlong="+init=epsg:4326"
+
+#Import MSOA shapefile
+
+setwd(paste0(R_workbench,"/Shapefiles/MSOA"))
+MSOA_shapefile <- readOGR(dsn=".", layer="Middle_Layer_Super_Output_Areas_December_2011_Generalised_Clipped_Boundaries_in_England_and_Wales") 
+MSOA_shapefile <- spTransform(MSOA_shapefile, CRS(latlong))
+
+#Create shapefile with provider data
+
+RTT_provider_locations <- s3read_using(fread
+                                       , object = paste0(RTT_subfolder,"/Locating providers/","RTT provider locations from Google Maps.csv") # File to open
+                                       , bucket = IHT_bucket, header=TRUE) # Bucket name defined above
+
+RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$long,
+                                                        RTT_provider_locations$lat),
+                                                  data=RTT_provider_locations,
+                                                  proj4string = CRS(latlong))
+
+
+#Overlay points over MSOAs
+
+plot(MSOA_shapefile)
+points(RTT_providers_shapefile,col="red")
+providers_over_MSOA <- over(RTT_providers_shapefile,MSOA_shapefile)
+rm(RTT_providers_shapefile,MSOA_shapefile)
+
+#Merge this back into main provider file
+
+RTT_provider_locations <- cbind(RTT_provider_locations,
+                                select(providers_over_MSOA,msoa11cd,msoa11nm))
+rm(providers_over_MSOA)
