@@ -281,3 +281,28 @@ rm(RTT_providers_shapefile,MSOA_shapefile)
 RTT_provider_locations <- cbind(RTT_provider_locations,
                                 select(providers_over_MSOA,msoa11cd,msoa11nm))
 rm(providers_over_MSOA)
+
+#Load IMD by MSOA lookup
+#From https://research.mysociety.org/sites/imd2019/about/
+
+MSOA_to_IMD19 <- s3read_using(fread, object = paste0(RTT_subfolder,"/IMD 2019/","imd2019_msoa_level_data.csv"),
+                             bucket = IHT_bucket, header=TRUE)
+
+MSOA_to_IMD19 <- MSOA_to_IMD19 %>%
+  select(.,MSOAC,MSOADECILE,MSOAQUINTILE,REG) %>%
+  rename(.,msoa11cd=MSOAC,IMD19_decile=MSOADECILE,IMD19_quintile=MSOAQUINTILE,region=REG)
+  
+##########################################################
+################### All-in-one lookup ####################
+##########################################################
+
+#In a single lookup
+provider_to_IMD_region <- RTT_provider_locations %>%
+  select(.,Provider.Org.Code,msoa11cd) %>%
+  left_join(.,MSOA_to_IMD19,by="msoa11cd")
+
+#Save
+s3write_using(provider_to_IMD_region # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above

@@ -159,7 +159,7 @@ IMD_by_CCG_wide <- IMD_by_CCG_long %>%
 
 s3write_using(IMD_by_CCG_wide # What R object we are saving
               , FUN = write.csv # Which R function we are using to save
-              , object = paste0(RTT_subfolder,"/","IMD_by_CCG_wide.csv") # Name of the file to save to (include file type)
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","IMD_by_CCG_wide.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
 
 ##############################################################
@@ -214,10 +214,10 @@ CCG_NHSER_joined_wide <- CCG_NHSER_joined_long %>%
 
 s3write_using(CCG_NHSER_joined_long # What R object we are saving
               , FUN = write.csv # Which R function we are using to save
-              , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_long.csv") # Name of the file to save to (include file type)
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_long.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
 
 s3write_using(CCG_NHSER_joined_wide # What R object we are saving
               , FUN = write.csv # Which R function we are using to save
-              , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_wide.csv") # Name of the file to save to (include file type)
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_wide.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above

@@ -47,13 +47,17 @@ not_all_na <- function(x) any(!is.na(x))
 ################### Import CCG-level deprivation data and region lookups ##############
 #######################################################################################
 
-IMD_by_CCG_wide <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/","IMD_by_CCG_wide.csv") # File to open
-                              , bucket = IHT_bucket) # Bucket name defined above
+# IMD_by_CCG_wide <- s3read_using(fread
+#                               , object = paste0(RTT_subfolder,"/Custom RTT lookups/","IMD_by_CCG_wide.csv") # File to open
+#                               , bucket = IHT_bucket) # Bucket name defined above
+# 
+# Region_by_CCG_wide <- s3read_using(fread
+#                                 , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_wide.csv") # File to open
+#                                 , bucket = IHT_bucket) # Bucket name defined above
 
-Region_by_CCG_wide <- s3read_using(fread
-                                , object = paste0(RTT_subfolder,"/","CCG_NHSER_joined_wide.csv") # File to open
-                                , bucket = IHT_bucket) # Bucket name defined above
+provider_to_IMD_region <- s3read_using(fread
+                                       , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # File to open
+                                       , bucket = IHT_bucket) # Bucket name defined above
 
 #############################################################
 ################### Import monthly RTT data #################
@@ -67,6 +71,11 @@ RTT_allmonths <- s3read_using(fread
 ################### Create new variables #################
 ##########################################################
 
+#### Merge in provider lookup
+
+RTT_allmonths <- RTT_allmonths %>% 
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code")
+  
 #### Create pathways variable
 
 RTT_allmonths <- RTT_allmonths %>%
@@ -477,3 +486,337 @@ dashboard_stats_ccg(monthyear="Feb22",
                     quantiles=c(0.50,0.92),
                     type="incomplete",
                     independent=2)
+
+############### By Region
+
+#Independent sector: 0 non-IS, 1 IS and 2 All
+
+dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type,independent){
+  
+  #Pick relevant month-year and filter out private patients
+  
+  dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    select(starts_with("Gt")) %>%
+    select(where(not_all_na)) %>%
+    names(.)
+  
+  #If regionname is England, use all rows and all regionname
+  
+  dataset$region <- ifelse(rep(regionname,nrow(dataset))=="ENGLAND",
+                                          rep("ENGLAND",nrow(dataset)),
+                                          dataset$region)
+  
+  #Filter based on type of provider
+  
+  if (independent==0){
+    monthly_data <- filter(dataset,IS_provider==0)
+    IS <- "Non-IS"
+  } else if (independent==1) {
+    monthly_data <- filter(dataset,IS_provider==1)
+    IS <- "IS"
+  } else if (independent==2) {
+    monthly_data <- dataset
+    IS <- "All"
+  }
+  
+  #Aggregate relevant variables
+  
+  if (type=="incomplete"){
+    datasubset <- filter(monthly_data,region==regionname&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Incomplete Pathways")
+  } else if (type=="completeadmitted"){
+    datasubset <- filter(monthly_data,region==regionname&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Completed Pathways For Admitted Patients")
+  } else if (type=="completenonadmitted"){
+    datasubset <- filter(monthly_data,region==regionname&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
+  } else if (type=="incompleteDTA"){
+    datasubset <- filter(dataset,region==regionname&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Incomplete Pathways with DTA")
+  } else if (type=="newRTT"){
+    datasubset <- filter(dataset,region==regionname&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="New RTT Periods - All Patients")
+  }
+  
+  #Aggregate rows and compute total patients
+  
+  if (type=="completeadmitted"|type=="completenonadmitted"){
+    
+    datasubset_sum <- datasubset %>%
+      select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
+    
+    datasubset_unknown <- datasubset %>% 
+      summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
+    
+    total <- sum(datasubset_sum,na.rm=TRUE) + sum(datasubset_unknown,na.rm=TRUE)
+    
+    total.nonmiss <- sum(datasubset_sum,na.rm=TRUE)
+    
+  } else if (type=="incomplete"|type=="incompleteDTA") {
+    
+    datasubset_sum <- datasubset %>%
+      select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
+    
+    total <- sum(datasubset_sum,na.rm=TRUE)
+    
+    total.nonmiss <- total
+  } else if (type=="newRTT"){
+    
+    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    
+    total.nonmiss <- total
+  }
+  
+  #Only compute quantiles if there are more than 20 patients
+  #Compute them in 3 different ways: Total, IS and non-IS
+  
+  if (total.nonmiss>=20&type!="newRTT"){
+    #Return weeks (for a given quantile)
+    
+    weeks <- rep(NA,length(quantiles))
+    
+    for (j in 1:length(quantiles)){
+      
+      target <- quantiles[j]*total.nonmiss
+      
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
+                           cumsum=cumsum(datasubset_sum)) %>%
+        mutate(.,above=ifelse(cumsum>=target,1,0),
+               difference=(cumsum-target))
+      
+      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+    }
+    
+    weeks <- as.data.frame(weeks) %>% t()
+    colnames(weeks) <- paste0("weeks.",quantiles*100)
+    
+    #Return % of patients waiting 18 weeks or less
+    
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
+    rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
+    
+    number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
+    rate_18_or_less <- round(number_18_or_less/total.nonmiss*100,1) %>% unlist()
+    
+    #Function output
+    
+    output <- data.frame(monthyear=as.character(monthyear),
+                         regionname=as.character(regionname),
+                         specialty=as.character(specialty),
+                         type=as.character(type),
+                         independent=as.character(IS),
+                         total.patients=total,
+                         number.18.or.less=number_18_or_less,
+                         rate.18wks.or.less=rate_18_or_less,
+                         number.52.or.more=number_52_or_more,
+                         rate.52wks.or.more=rate_52_or_more,
+                         weeks)
+  } else if (total.nonmiss<20|type=="newRTT") {
+    weeks <- rep(NA,length(quantiles))
+    
+    weeks <- as.data.frame(weeks) %>% t()
+    
+    colnames(weeks) <- paste0("weeks.",quantiles*100)
+    
+    output <- data.frame(monthyear=as.character(monthyear),
+                         regionname=as.character(regionname),
+                         specialty=as.character(specialty),
+                         type=as.character(type),
+                         independent=as.character(IS),
+                         total.patients=total,
+                         number.18.or.less=NA,
+                         rate.18wks.or.less=NA,
+                         number.52.or.more=NA,
+                         rate.52wks.or.more=NA,
+                         weeks)
+  }
+  
+  return(output)
+}
+
+#Example
+dashboard_stats_region(monthyear="Feb22",
+                       regionname="London",
+                    specialty="Total",
+                    quantiles=c(0.50,0.92),
+                    type="incomplete",
+                    independent=2)
+
+############### By IMD quintile
+
+#Independent sector: 0 non-IS, 1 IS and 2 All
+
+dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,independent){
+  
+  #Pick relevant month-year and filter out private patients
+  
+  dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    select(starts_with("Gt")) %>%
+    select(where(not_all_na)) %>%
+    names(.)
+  
+  #If regionname is England, use all rows and all regionname
+  
+  dataset$IMD19_quintile <- ifelse(rep(imd,nrow(dataset))=="ENGLAND",
+                           rep("ENGLAND",nrow(dataset)),
+                           dataset$IMD19_quintile)
+  
+  #Filter based on type of provider
+  
+  if (independent==0){
+    monthly_data <- filter(dataset,IS_provider==0)
+    IS <- "Non-IS"
+  } else if (independent==1) {
+    monthly_data <- filter(dataset,IS_provider==1)
+    IS <- "IS"
+  } else if (independent==2) {
+    monthly_data <- dataset
+    IS <- "All"
+  }
+  
+  #Aggregate relevant variables
+  
+  if (type=="incomplete"){
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Incomplete Pathways")
+  } else if (type=="completeadmitted"){
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Completed Pathways For Admitted Patients")
+  } else if (type=="completenonadmitted"){
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
+  } else if (type=="incompleteDTA"){
+    datasubset <- filter(dataset,IMD19_quintile==imd&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="Incomplete Pathways with DTA")
+  } else if (type=="newRTT"){
+    datasubset <- filter(dataset,IMD19_quintile==imd&
+                           Treatment.Function.Name==specialty&
+                           RTT.Part.Description=="New RTT Periods - All Patients")
+  }
+  
+  #Aggregate rows and compute total patients
+  
+  if (type=="completeadmitted"|type=="completenonadmitted"){
+    
+    datasubset_sum <- datasubset %>%
+      select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
+    
+    datasubset_unknown <- datasubset %>% 
+      summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
+    
+    total <- sum(datasubset_sum,na.rm=TRUE) + sum(datasubset_unknown,na.rm=TRUE)
+    
+    total.nonmiss <- sum(datasubset_sum,na.rm=TRUE)
+    
+  } else if (type=="incomplete"|type=="incompleteDTA") {
+    
+    datasubset_sum <- datasubset %>%
+      select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
+    
+    total <- sum(datasubset_sum,na.rm=TRUE)
+    
+    total.nonmiss <- total
+  } else if (type=="newRTT"){
+    
+    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    
+    total.nonmiss <- total
+  }
+  
+  #Only compute quantiles if there are more than 20 patients
+  #Compute them in 3 different ways: Total, IS and non-IS
+  
+  if (total.nonmiss>=20&type!="newRTT"){
+    #Return weeks (for a given quantile)
+    
+    weeks <- rep(NA,length(quantiles))
+    
+    for (j in 1:length(quantiles)){
+      
+      target <- quantiles[j]*total.nonmiss
+      
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
+                           cumsum=cumsum(datasubset_sum)) %>%
+        mutate(.,above=ifelse(cumsum>=target,1,0),
+               difference=(cumsum-target))
+      
+      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+    }
+    
+    weeks <- as.data.frame(weeks) %>% t()
+    colnames(weeks) <- paste0("weeks.",quantiles*100)
+    
+    #Return % of patients waiting 18 weeks or less
+    
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
+    rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
+    
+    number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
+    rate_18_or_less <- round(number_18_or_less/total.nonmiss*100,1) %>% unlist()
+    
+    #Function output
+    
+    output <- data.frame(monthyear=as.character(monthyear),
+                         imd_quintile=as.character(imd),
+                         specialty=as.character(specialty),
+                         type=as.character(type),
+                         independent=as.character(IS),
+                         total.patients=total,
+                         number.18.or.less=number_18_or_less,
+                         rate.18wks.or.less=rate_18_or_less,
+                         number.52.or.more=number_52_or_more,
+                         rate.52wks.or.more=rate_52_or_more,
+                         weeks)
+  } else if (total.nonmiss<20|type=="newRTT") {
+    weeks <- rep(NA,length(quantiles))
+    
+    weeks <- as.data.frame(weeks) %>% t()
+    
+    colnames(weeks) <- paste0("weeks.",quantiles*100)
+    
+    output <- data.frame(monthyear=as.character(monthyear),
+                         imd_quintile=as.character(imd),
+                         specialty=as.character(specialty),
+                         type=as.character(type),
+                         independent=as.character(IS),
+                         total.patients=total,
+                         number.18.or.less=NA,
+                         rate.18wks.or.less=NA,
+                         number.52.or.more=NA,
+                         rate.52wks.or.more=NA,
+                         weeks)
+  }
+  
+  return(output)
+}
+
+#Example
+dashboard_stats_imd_quintile(monthyear="Feb22",
+                       imd="5",
+                       specialty="Total",
+                       quantiles=c(0.50,0.92),
+                       type="incomplete",
+                       independent=2)
