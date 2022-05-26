@@ -173,3 +173,61 @@ for (i in chart_pathway){
   }
   
 }
+
+## get data only to export to excel
+RTT_comp_data <- function(ccg_code = 'ENGLAND',
+                          specialty,
+                          quantiles = c(0.95, 0.50),
+                          type,
+                          chart_title = ''){
+  
+  res <- list()
+  
+  j <- 1
+  for (i in all_months){
+    
+    res[[j]] <- dashboard_stats_ccg(monthyear=i,
+                                    ccg_code=ccg_code,
+                                    specialty=specialty,
+                                    quantiles=quantiles,
+                                    type=type,
+                                    independent=0)
+    res[[j+1]] <- dashboard_stats_ccg(monthyear=i,
+                                      ccg_code=ccg_code,
+                                      specialty=specialty,
+                                      quantiles=quantiles,
+                                      type=type,
+                                      independent=1)
+    
+    j <- j + 2
+    
+  }
+  
+  result <- rbindlist(res)
+  
+  result$date <- as.Date(paste0('01-',
+                                substr(result$monthyear, 1, 3),
+                                '-', 
+                                substr(result$monthyear, 4, 5)),
+                         format = '%d-%b-%y')
+ 
+  return(result) 
+}
+
+
+n <- 1
+data_list <- list()
+## save processed data
+for (i in chart_pathway){
+  
+  for (j in all_specialties){
+    
+    data_list[[n]] <- RTT_comp_data(specialty = j, type = i)
+    
+    print(paste0('Processed ', n, ' of ', length(chart_pathway) * length(all_specialties)))
+    
+    n <- n + 1
+    
+  }
+  
+}
