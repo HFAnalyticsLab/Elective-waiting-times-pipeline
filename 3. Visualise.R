@@ -91,50 +91,60 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                                 substr(result$monthyear, 4, 5)),
                          format = '%d-%b-%y')
   
-  result[, .N, by = independent]
-  #p <- ggplot(result, aes(x = date, y = total.patients / 1000, colour = independent)) +
-  #  geom_line() +
-  #  ggtitle(chart_title) +
-  #  theme_classic()
   chart_1_data <- data.frame(date = unique(result$date),
                              prop = result$total.patients[result$independent == 'IS'] /
                                (result$total.patients[result$independent == 'Non-IS'] +
-                               result$total.patients[result$independent == 'IS']) * 100)
+                                  result$total.patients[result$independent == 'IS']) * 100,
+                             vol = result$total.patients[result$independent == 'Non-IS'] +
+                               result$total.patients[result$independent == 'IS'])
   
   
   chart_2_data <- data.frame(date = unique(result$date),
                              prop = result$number.18.or.less[result$independent == 'IS'] /
                                (result$number.18.or.less[result$independent == 'Non-IS'] +
-                                result$number.18.or.less[result$independent == 'IS']) * 100)
+                                  result$number.18.or.less[result$independent == 'IS']) * 100,
+                             vol = result$number.18.or.less[result$independent == 'Non-IS'] +
+                               result$number.18.or.less[result$independent == 'IS'])
   
-  p <- ggplot(chart_1_data, aes(x = date, y = prop)) +
-    geom_line() +
-    ggtitle(chart_title) +
-    theme_classic() + 
-    expand_limits(y = 0) +
-    ggtitle('Proportion of patients with IS care delivered')
-
-  #q <- ggplot(result, aes(x = date, y = number.18.or.less / 1000, colour = independent)) +
-  #  geom_line() +
-  #  ggtitle(chart_title) +
-  #  theme_classic()
+  ratio1 <- max(chart_1_data$vol) / max(chart_1_data$prop)
   
-  q <- ggplot(chart_2_data, aes(x = date, y = prop)) +
-    geom_line() +
-    ggtitle(chart_title) +
-    theme_classic() + 
-    expand_limits(y = 0) +
-    ggtitle('Proportion of patients with care delivered <18 weeks IS care delivered')
+  ylim.vol <- c(0, max(chart_1_data$vol))
+  ylim.pro <- c(0, max(chart_1_data$prop))
+  
+  b <- diff(ylim.vol)/diff(ylim.pro)
+  a <- 0
+  
+  p <- ggplot(chart_1_data, aes(date, vol)) +
+    geom_col(fill = 'light grey') +
+    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
+    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
+    theme_minimal() +
+    ggtitle('Proportion of patients with IS care delivered with patient volume')
+  
+  ratio2 <- max(chart_2_data$vol) / max(chart_2_data$prop)
+  
+  ylim.vol <- c(0, max(chart_2_data$vol))
+  ylim.pro <- c(0, max(chart_2_data$prop))
+  
+  b <- diff(ylim.vol)/diff(ylim.pro)
+  a <- 0
+  
+  q <- ggplot(chart_2_data, aes(date, vol)) +
+    geom_col(fill = 'light grey') +
+    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
+    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
+    theme_minimal() +
+  ggtitle('Proportion of patients with care delivered <18 weeks IS care delivered')
   
   r <- ggplot(result, aes(x = date, y = rate.18wks.or.less, colour = independent)) +
-    geom_line() +
+    geom_line(size=1) +
     ggtitle(chart_title) +
-    theme_classic()
+    theme_minimal()
   
   s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = independent)) +
-    geom_line() +
+    geom_line(size=1) +
     ggtitle(chart_title) +
-    theme_classic()
+    theme_minimal()
   
   plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'right') %>%
   annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type)))
@@ -231,3 +241,6 @@ for (i in chart_pathway){
   }
   
 }
+
+data_export <- rbindlist(data_list)
+write_csv(data_export, file = 'RTT_processed.csv')
