@@ -91,7 +91,28 @@ RTT_allmonths <- RTT_allmonths %>%
 #### Clean up specialty names
 
 RTT_allmonths <- RTT_allmonths %>%
-  mutate(.,Treatment.Function.Name=str_replace_all(Treatment.Function.Name," Service",""))
+  mutate(.,Treatment.Function.Name=str_replace_all(Treatment.Function.Name," Service","")) %>%
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Ear, Nose & Throat (ENT)","Ear Nose and Throat",Treatment.Function.Name)) %>%
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Geriatric Medicine","Elderly Medicine",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Neurosurgical","Neurosurgery",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Trauma & Orthopaedics","Trauma and Orthopaedic",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Medicals","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Mental Healths","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Others","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Paediatrics","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Surgicals","Other",Treatment.Function.Name))
+
+#### COVID-period (takes a long time to run)
+
+# RTT_allmonths <- RTT_allmonths %>%
+#   mutate(.,month_clean=word(Period,2,sep="-"),
+#          year_clean=word(Period,3,sep="-")) %>%
+#   mutate(date_clean=lubridate::dmy(paste(01,month_clean,year_clean,sep="/"))) %>%
+#   dplyr::dplyr::select(.,-c("month_clean","year_clean")) %>%
+#   mutate(.,COVID_timing=case_when(date_clean<lubridate::dmy("01-03-2020") ~ "Pre-COVID",
+#                                   date_clean>=lubridate::dmy("01-03-2020")&date_clean<lubridate::dmy("01-06-2021") ~ "COVID",
+#                                   date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
+#                                   TRUE ~ "NA"))
 
 #### Capture names of providers and specialties
 
@@ -141,8 +162,8 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
   #Which wait-time columns are filled in?
   
   GT_names <- dataset %>%
-    select(starts_with("Gt")) %>%
-    select(where(not_all_na)) %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
     names(.)
     
   #If provider is England, use all rows and all providers
@@ -195,7 +216,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #with a known start state
     
     datasubset_sum <-  datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -212,7 +233,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #with a known start state
     
     datasubset_sum <-  datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -224,7 +245,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
     #For New RTT (clock start this month) there are no data points in the waiting times
     #columns
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -247,7 +268,7 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -303,11 +324,11 @@ dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type
 }
 
 #Example
-dashboard_stats_provider(monthyear="Feb22",
-                         provider="ENGLAND",
-                         specialty="Total",
-                         quantiles=c(0.50,0.95),
-                         type="incomplete")
+# dashboard_stats_provider(monthyear="Feb22",
+#                          provider="ENGLAND",
+#                          specialty="Total",
+#                          quantiles=c(0.50,0.95),
+#                          type="incomplete")
 
 ############### By CCG
 
@@ -322,8 +343,8 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   #Which wait-time columns are filled in?
   
   GT_names <- dataset %>%
-    select(starts_with("Gt")) %>%
-    select(where(not_all_na)) %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
     names(.)
   
   #If CCG is England, use all rows and all CCGs
@@ -338,7 +359,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
     ccg_name <- "ENGLAND"
   } else {
     ccg_name <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code==ccg_code) %>%
-      select(.,Commissioner.Org.Name) %>% unique(.) %>% unlist(.) %>% first(.)
+      dplyr::select(.,Commissioner.Org.Name) %>% unique(.) %>% unlist(.) %>% first(.)
   }
   
   #Filter based on type of provider
@@ -383,7 +404,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -396,7 +417,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -404,7 +425,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -426,7 +447,7 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -480,12 +501,12 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
 }
 
 #Example
-dashboard_stats_ccg(monthyear="Feb22",
-                    ccg_code="ENGLAND",
-                    specialty="Total",
-                    quantiles=c(0.50,0.92),
-                    type="incomplete",
-                    independent=2)
+# dashboard_stats_ccg(monthyear="Feb22",
+#                     ccg_code="ENGLAND",
+#                     specialty="Total",
+#                     quantiles=c(0.50,0.92),
+#                     type="incomplete",
+#                     independent=2)
 
 ############### By Region
 
@@ -500,8 +521,8 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
   #Which wait-time columns are filled in?
   
   GT_names <- dataset %>%
-    select(starts_with("Gt")) %>%
-    select(where(not_all_na)) %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
     names(.)
   
   #If regionname is England, use all rows and all regionname
@@ -552,7 +573,7 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -565,7 +586,7 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -573,7 +594,7 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -595,7 +616,7 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -647,12 +668,12 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
 }
 
 #Example
-dashboard_stats_region(monthyear="Feb22",
-                       regionname="London",
-                    specialty="Total",
-                    quantiles=c(0.50,0.92),
-                    type="incomplete",
-                    independent=2)
+# dashboard_stats_region(monthyear="Feb22",
+#                        regionname="London",
+#                     specialty="Total",
+#                     quantiles=c(0.50,0.92),
+#                     type="incomplete",
+#                     independent=2)
 
 ############### By IMD quintile
 
@@ -667,8 +688,8 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
   #Which wait-time columns are filled in?
   
   GT_names <- dataset %>%
-    select(starts_with("Gt")) %>%
-    select(where(not_all_na)) %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
     names(.)
   
   #If regionname is England, use all rows and all regionname
@@ -719,7 +740,7 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
@@ -732,7 +753,7 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
     datasubset_sum <- datasubset %>%
-      select(GT_names) %>% 
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -740,7 +761,7 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -762,7 +783,7 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -814,9 +835,9 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
 }
 
 #Example
-dashboard_stats_imd_quintile(monthyear="Feb22",
-                       imd="5",
-                       specialty="Total",
-                       quantiles=c(0.50,0.92),
-                       type="incomplete",
-                       independent=2)
+# dashboard_stats_imd_quintile(monthyear="Feb22",
+#                        imd="5",
+#                        specialty="Total",
+#                        quantiles=c(0.50,0.92),
+#                        type="incomplete",
+#                        independent=2)

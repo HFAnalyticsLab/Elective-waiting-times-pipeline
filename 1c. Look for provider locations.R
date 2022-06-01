@@ -68,8 +68,190 @@ all_providers <- s3read_using(fread
                               , object = paste0(RTT_subfolder,"/Locating providers/","all_providers.csv") # File to open
                               , bucket = IHT_bucket, header=TRUE, drop=1) # Bucket name defined above
 
-# all_providers_sample <- all_providers[sample(1:nrow(all_providers),50,replace=FALSE),]
-all_providers_sample <- all_providers
+#Remove duplicates
+all_providers <- all_providers %>%
+  group_by(Provider.Org.Code) %>%
+  summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
+  ungroup()
+
+#all_providers_sample <- all_providers[sample(1:nrow(all_providers),50,replace=FALSE),]
+#all_providers_sample <- all_providers
+
+################################################
+################### Load NHS data ##############
+################################################
+
+#etrust
+etrust <- s3read_using(fread
+                              , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","etrust.csv") # File to open
+                              , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+etrust <- etrust %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#ephpsite
+ephpsite <- s3read_using(fread
+                       , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","ephpsite.csv") # File to open
+                       , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+ephpsite <- ephpsite %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#ephp
+ephp <- s3read_using(fread
+                       , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","ephp.csv") # File to open
+                       , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+ephp <- ephp %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#enonnhs
+enonnhs <- s3read_using(fread
+                     , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","enonnhs.csv") # File to open
+                     , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+enonnhs <- enonnhs %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#ets
+ets <- s3read_using(fread
+                        , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","ets.csv") # File to open
+                        , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+ets <- ets %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#etr
+etr <- s3read_using(fread
+                    , object = paste0(RTT_subfolder,"/Locating providers/NHS data/","etr.csv") # File to open
+                    , bucket = IHT_bucket, header=FALSE) # Bucket name defined above
+etr <- etr %>%
+  select(V1,V2,V10) %>%
+  rename(provider.code=V1,provider.name=V2,pcode=V10)
+
+#Appended
+nhs.providers <- plyr::rbind.fill(etrust,ephpsite,ephp,ets,etr) %>%
+  distinct(.)
+
+#Merge into provider list
+all_providers_with_nhs_loc <- left_join(all_providers,nhs.providers,by=c("Provider.Org.Code"="provider.code"))
+#all_providers_with_nhs_loc <- all_providers_with_nhs_loc[sample(1:nrow(all_providers_with_nhs_loc),10,replace=FALSE),]
+
+missing_providers <- all_providers_with_nhs_loc %>%
+  filter(.,is.na(pcode)) %>%
+  pull(Provider.Org.Code)
+ 
+#Search for postcodes
+
+search_postcode_google <- function(orgcode,type){
+  
+  #Provider name and code
+  org_pcode <- filter(all_providers_with_nhs_loc,Provider.Org.Code==orgcode) %>%
+    head(.,n=1) %>% 
+    pull(pcode) %>%
+    unlist()
+  
+  #Carry out search
+  search_term <- paste0(org_pcode," in England")
+  
+  if(type=="none"){
+    search_result <- google_places(search_string =  search_term,
+                                   key = api_key)
+  } else (
+    search_result <- google_places(search_string =  search_term, place_type = type,
+                                   key = api_key)
+  )
+  
+  #Status
+  status <- search_result$status[1]
+  
+  #Number of results
+  number_results <- length(search_result$results$name)
+  
+  #First name
+  name <- ifelse(number_results==0,"NA",search_result$results$name[1])
+  
+  #Place ID
+  id <- ifelse(number_results==0,"NA",search_result$results$place_id[1])
+  
+  #Address
+  address <- ifelse(number_results==0,"NA",search_result$results$formatted_address[1])
+  
+  #Latitude
+  lat <- ifelse(number_results==0,"NA",search_result$results$geometry$location$lat[1])
+  
+  #Longitude
+  long <- ifelse(number_results==0,"NA",search_result$results$geometry$location$lng[1])
+  
+  #Return
+  search_results_table <- data.frame(Provider.Org.Code=as.character(orgcode),
+                                     Provider.Postcode=as.character(org_pcode),
+                                     place_type_provided=type,
+                                     status=status,
+                                     number_results=number_results,
+                                     name=name,
+                                     id=id,
+                                     address=address,
+                                     lat=lat,
+                                     long=long)
+  
+  return(as.data.frame(search_results_table))
+}
+
+search_postcode_google_catch <- function(orgcode,type){
+  tryCatch(
+    {
+      return(search_postcode_google(orgcode,type))
+    },
+    error=function(error_message) {
+      
+      #Results in API fails
+      search_results_table_fail <- data.frame(Provider.Org.Code=as.character(orgcode),
+                                              Provider.Org.Pcode=as.character(NA),
+                                              place_type_provided=type,
+                                              status="fail",
+                                              number_results="fail",
+                                              name=NA,
+                                              id=NA,
+                                              address=NA,
+                                              lat=NA,
+                                              long=NA)
+      
+      return(search_results_table_fail)
+    }
+  )
+}
+
+#Run this function on a a loop - will take about 5min
+
+pcode.args <- all_providers_with_nhs_loc$Provider.Org.Code
+
+out.search.pcodes <- pbmapply(search_postcode_google_catch,
+                                 orgcode=pcode.args,
+                                 MoreArgs = list(type="none"))
+out.search.pcodes.df <- as.data.frame(t(out.search.pcodes)) %>%
+  filter(.,!is.na(Provider.Postcode))
+  
+#Add those that weren't in NHS database
+#This uses a search based on provider names (see next section of code)
+
+RTT_google_locations <- s3read_using(fread
+                    , object = paste0(RTT_subfolder,"/Locating providers/RTT provider locations from Google Maps.csv") # File to open
+                    , bucket = IHT_bucket, header=TRUE) # Bucket name defined above
+
+RTT_google_locations <- RTT_google_locations %>%
+  filter(.,Provider.Org.Code %in% missing_providers) %>%
+  select(.,-"Provider.Org.Name")
+
+out.search.pcodes.df <- plyr::rbind.fill(out.search.pcodes.df,RTT_google_locations) %>%
+  apply(.,2,as.character)
+
+#Save
+
+s3write_using(out.search.pcodes.df # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Locating providers/","Google_NHS_postcodes.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
 
 #################################################################
 ################### Function to return coordinates ##############
@@ -260,14 +442,13 @@ MSOA_shapefile <- spTransform(MSOA_shapefile, CRS(latlong))
 #Create shapefile with provider data
 
 RTT_provider_locations <- s3read_using(fread
-                                       , object = paste0(RTT_subfolder,"/Locating providers/","RTT provider locations from Google Maps.csv") # File to open
+                                       , object = paste0(RTT_subfolder,"/Locating providers/","Google_NHS_postcodes.csv") # File to open
                                        , bucket = IHT_bucket, header=TRUE) # Bucket name defined above
 
 RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$long,
                                                         RTT_provider_locations$lat),
                                                   data=RTT_provider_locations,
                                                   proj4string = CRS(latlong))
-
 
 #Overlay points over MSOAs
 
