@@ -85,6 +85,10 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
   
   result <- rbindlist(res)
   
+  result$total_noNA <- ifelse(is.na(result$total.patients), 0, result$total.patients)
+  result$num18.or.less_noNA <- ifelse(is.na(result$number.18.or.less), 0, result$number.18.or.less)
+  result$Provider <- ifelse(result$independent == 'IS', 'Independent', 'NHS')
+  
   result$date <- as.Date(paste0('01-',
                                 substr(result$monthyear, 1, 3),
                                 '-', 
@@ -92,19 +96,22 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                          format = '%d-%b-%y')
   
   chart_1_data <- data.frame(date = unique(result$date),
-                             prop = result$total.patients[result$independent == 'IS'] /
-                               (result$total.patients[result$independent == 'Non-IS'] +
-                                  result$total.patients[result$independent == 'IS']) * 100,
-                             vol = result$total.patients[result$independent == 'Non-IS'] +
-                               result$total.patients[result$independent == 'IS'])
+                             prop = result$total_noNA[result$independent == 'IS'] /
+                               (result$total_noNA[result$independent == 'Non-IS'] +
+                                  result$total_noNA[result$independent == 'IS']) * 100,
+                             vol = result$total_noNA[result$independent == 'Non-IS'] +
+                               result$total_noNA[result$independent == 'IS'])
   
   
   chart_2_data <- data.frame(date = unique(result$date),
-                             prop = result$number.18.or.less[result$independent == 'IS'] /
-                               (result$number.18.or.less[result$independent == 'Non-IS'] +
-                                  result$number.18.or.less[result$independent == 'IS']) * 100,
-                             vol = result$number.18.or.less[result$independent == 'Non-IS'] +
-                               result$number.18.or.less[result$independent == 'IS'])
+                             prop = result$num18.or.less_noNA[result$independent == 'IS'] /
+                               (result$num18.or.less_noNA[result$independent == 'Non-IS'] +
+                                  result$num18.or.less_noNA[result$independent == 'IS']) * 100,
+                             vol = result$num18.or.less_noNA[result$independent == 'Non-IS'] +
+                               result$num18.or.less_noNA[result$independent == 'IS'])
+  
+  chart_1_data <- chart_1_data[chart_1_data$vol > 0, ]
+  chart_2_data <- chart_2_data[chart_2_data$vol > 0, ]
   
   ratio1 <- max(chart_1_data$vol) / max(chart_1_data$prop)
   
@@ -114,13 +121,23 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
   b <- diff(ylim.vol)/diff(ylim.pro)
   a <- 0
   
+  if(ratio1 == Inf | is.na(ratio1)){
+    
+    p <- ggplot(data.frame())
+    
+  } else {
+    
   p <- ggplot(chart_1_data, aes(date, vol)) +
     geom_col(fill = 'light grey') +
     geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
     scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
     theme_minimal() +
-    ggtitle('Proportion of patients with IS care delivered with patient volume')
+    ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
+    theme(plot.title = element_text(size = 10),
+          axis.title = element_text(size = 8))
   
+}
+
   ratio2 <- max(chart_2_data$vol) / max(chart_2_data$prop)
   
   ylim.vol <- c(0, max(chart_2_data$vol))
@@ -128,26 +145,41 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
   
   b <- diff(ylim.vol)/diff(ylim.pro)
   a <- 0
-  
+
+  if(ratio2 == Inf | is.na(ratio2)){
+    
+    q <- ggplot(data.frame())
+    
+  } else {
+    
   q <- ggplot(chart_2_data, aes(date, vol)) +
     geom_col(fill = 'light grey') +
     geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
     scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
     theme_minimal() +
-  ggtitle('Proportion of patients with care delivered <18 weeks IS care delivered')
+  ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
+    theme(plot.title = element_text(size = 10),
+          axis.title = element_text(size = 8))
   
-  r <- ggplot(result, aes(x = date, y = rate.18wks.or.less, colour = independent)) +
+  }
+  
+  r <- ggplot(result, aes(x = date, y = rate.18wks.or.less, colour = Provider)) +
     geom_line(size=1) +
     ggtitle(chart_title) +
-    theme_minimal()
+    ylab('Proportion < 18 weeks') +
+    theme_minimal() +
+    theme(axis.title = element_text(size = 8))
   
-  s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = independent)) +
+  s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = Provider)) +
     geom_line(size=1) +
     ggtitle(chart_title) +
-    theme_minimal()
+    ylab('Proportion > 52 weeks') +
+    theme_minimal() +
+    theme(axis.title = element_text(size = 8))
   
-  plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'right') %>%
-  annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type)))
+  plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'bottom') %>%
+  annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type),
+                                     face = 'bold'))
   
   return(plot)
 }
