@@ -110,16 +110,17 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                              vol = result$num18.or.less_noNA[result$independent == 'Non-IS'] +
                                result$num18.or.less_noNA[result$independent == 'IS'])
   
-  chart_1_data <- chart_1_data[chart_1_data$vol > 0, ]
-  chart_2_data <- chart_2_data[chart_2_data$vol > 0, ]
+  prop1 <- result$total_noNA[result$independent == 'IS'] /
+    (result$total_noNA[result$independent == 'IS'] +
+       result$total_noNA[result$independent == 'Non-IS'])
+  prop1 <- rep(prop1, each = 2)
   
   ratio1 <- max(chart_1_data$vol) / max(chart_1_data$prop)
   
-  ylim.vol <- c(0, max(chart_1_data$vol))
-  ylim.pro <- c(0, max(chart_1_data$prop))
+  ylim.vol1 <- c(0, max(chart_1_data$vol))
+  ylim.pro1 <- c(0, max(chart_1_data$prop))
   
-  b <- diff(ylim.vol)/diff(ylim.pro)
-  a <- 0
+  b1 <- diff(ylim.vol1)/diff(ylim.pro1)
   
   if(ratio1 == Inf | is.na(ratio1)){
     
@@ -127,24 +128,28 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     
   } else {
     
-  p <- ggplot(chart_1_data, aes(date, vol)) +
-    geom_col(fill = 'light grey') +
-    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
-    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
-    theme_minimal() +
-    ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
-    theme(plot.title = element_text(size = 10),
-          axis.title = element_text(size = 8))
-  
+    p <-  ggplot(result, aes(date, total.patients, fill = Provider)) +
+          geom_col() +
+          geom_line(aes(y = prop1 * b1 * 100), color = 'black', size = 2) +
+          scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
+          theme_minimal() +
+          ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
+          theme(plot.title = element_text(size = 10),
+                axis.title = element_text(size = 8))
+    
 }
 
+  prop2 <- result$num18.or.less_noNA[result$independent == 'IS'] /
+    (result$num18.or.less_noNA[result$independent == 'IS'] +
+       result$num18.or.less_noNA[result$independent == 'Non-IS'])
+  prop2 <- rep(prop2, each = 2)
+  
   ratio2 <- max(chart_2_data$vol) / max(chart_2_data$prop)
   
-  ylim.vol <- c(0, max(chart_2_data$vol))
-  ylim.pro <- c(0, max(chart_2_data$prop))
+  ylim.vol2 <- c(0, max(chart_2_data$vol))
+  ylim.pro2 <- c(0, max(chart_2_data$prop))
   
-  b <- diff(ylim.vol)/diff(ylim.pro)
-  a <- 0
+  b2 <- diff(ylim.vol2)/diff(ylim.pro2)
 
   if(ratio2 == Inf | is.na(ratio2)){
     
@@ -152,15 +157,15 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     
   } else {
     
-  q <- ggplot(chart_2_data, aes(date, vol)) +
-    geom_col(fill = 'light grey') +
-    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
-    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
-    theme_minimal() +
-  ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
-    theme(plot.title = element_text(size = 10),
-          axis.title = element_text(size = 8))
-  
+    q <- ggplot(result, aes(date, num18.or.less_noNA, fill = Provider)) +
+          geom_col() +
+          geom_line(aes(y = prop2 * b2 * 100), color = 'black', size = 2) +
+          scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
+          theme_minimal() +
+          ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
+          theme(plot.title = element_text(size = 10),
+                axis.title = element_text(size = 8))
+        
   }
   
   r <- ggplot(result, aes(x = date, y = rate.18wks.or.less, colour = Provider)) +
@@ -196,7 +201,29 @@ plot_RTT_comp(specialty = 'Cardiology', type = 'completenonadmitted')
 plot_RTT_comp(specialty = 'Cardiology', type = 'incompleteDTA')
 plot_RTT_comp(specialty = 'Cardiology', type = 'newRTT')
 
+plot_RTT_comp(specialty = 'Ophthalmology', type = 'completeadmitted')
 
+
+### ORIGINAL METHOD
+#ratio2 <- max(chart_2_data$vol) / max(chart_2_data$prop)
+
+#ylim.vol <- c(0, max(chart_2_data$vol))
+#ylim.pro <- c(0, max(chart_2_data$prop))
+
+#b <- diff(ylim.vol)/diff(ylim.pro)
+#a <- 0
+
+#  q <- ggplot(chart_2_data, aes(date, vol)) +
+#    geom_col(fill = 'light grey') +
+#    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
+#    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
+#    theme_minimal() +
+#    ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
+#    theme(plot.title = element_text(size = 10),
+#          axis.title = element_text(size = 8))
+  
+
+#############################
 chart_pathway <- c('completeadmitted', 'completenonadmitted')
 
 n <- 1
