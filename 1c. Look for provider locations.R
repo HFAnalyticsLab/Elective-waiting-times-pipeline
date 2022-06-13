@@ -2,12 +2,6 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Some of these search results probably contain mistakes
-#Next, map to LSOA so we can get IMD and regions
-
-#Run search for all combinations of name-code, not just the first that appears
-#That way it would be less random
-
 #Other RESOURCES TO GET locations
 #https://healthgps.co.uk/ has org codes and addresses
 
@@ -469,6 +463,9 @@ rm(providers_over_MSOA)
 MSOA_to_IMD19 <- s3read_using(fread, object = paste0(RTT_subfolder,"/IMD 2019/","imd2019_msoa_level_data.csv"),
                              bucket = IHT_bucket, header=TRUE)
 
+# MSOA_to_IMD19 %>% 
+#   janitor::tabyl(MSOAQUINTILE)
+  
 MSOA_to_IMD19 <- MSOA_to_IMD19 %>%
   select(.,MSOAC,MSOADECILE,MSOAQUINTILE,REG) %>%
   rename(.,msoa11cd=MSOAC,IMD19_decile=MSOADECILE,IMD19_quintile=MSOAQUINTILE,region=REG)

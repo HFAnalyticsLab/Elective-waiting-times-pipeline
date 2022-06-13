@@ -1,3 +1,9 @@
+##########################################
+################### TO DO ################
+##########################################
+
+#Re run to get March 22 data in
+
 ###########################################
 ################### Set-up ################
 ###########################################
@@ -22,9 +28,11 @@ rm(list = ls())
 IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
 RTT_subfolder <- "RTT waiting times data"
 R_workbench <- path.expand("~")
+localgit <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 #Get raw data
 
+setwd(localgit)
 source('2. Produce descriptive statistics.R')
 
 #################################################################
@@ -34,12 +42,12 @@ source('2. Produce descriptive statistics.R')
 #### Combinations to run on
 
 combinations.one <- expand.grid(months=all_months,
-                            specialties=all_specialties,
-                            pathways=pathways[2:3],
+                            specialties=c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),
+                            pathways=pathways[1:3],
                             independent=c(0:2),
                             ccg="ENGLAND") %>% varhandle::unfactor()
 #### Outputs
-
+ 
 # out.combinations.one <- pbmapply(ccg_code=combinations.one$ccg,
 #                                  dashboard_stats_ccg,
 #                                  monthyear=combinations.one$months,
@@ -76,7 +84,6 @@ admitted.by.spec.is <- admitted.by.spec.is %>%
   mutate(.,year_clean=paste0("20",str_sub(monthyear, start= -2)),
          month_clean=substr(monthyear, 1, 3)) %>%
   mutate(.,date_clean=lubridate::ymd(paste(year_clean,month_clean,"01",sep="-"))) %>%
-  dplyr::select(.,-c("month_clean","year_clean")) %>%
   mutate(.,COVID_timing=case_when(date_clean<lubridate::dmy("01-03-2020") ~ "Pre-COVID",
                                     date_clean>=lubridate::dmy("01-03-2020")&date_clean<lubridate::dmy("01-06-2021") ~ "COVID",
                                     date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
@@ -145,6 +152,78 @@ stats_two <- summary_one_wide %>%
   arrange(type,desc(stat_is_growth_vs_all_prepost)) %>%
   select(.,specialty,type,stat_is_growth_vs_all_prepost,stat_delta_share_IS)
 
+#Chart 1.1
+
+months_per_year <- admitted.by.spec.is %>%
+  group_by(year_clean) %>%
+  summarise(.,n_months=n_distinct(month_clean)) %>% 
+  ungroup()
+  
+chart_1_1_data <- admitted.by.spec.is %>%
+  filter(.,independent!="All") %>%
+  mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>% 
+  group_by(type,year_clean,specialty,independent) %>%
+  summarise(.,total.patients=sum(total.patients,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(type,year_clean,specialty) %>%
+  mutate(.,total.patients.all=sum(total.patients,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  left_join(.,months_per_year,by="year_clean") %>% 
+  mutate(.,total.patients.per.month=total.patients/n_months,
+         pct_sector=total.patients/total.patients.all)
+
+chart_1_1 <- chart_1_1_data %>%
+  filter(.,specialty=="Total") %>% 
+  mutate(year_clean=as.numeric(year_clean)) %>% 
+  ggplot(., aes(x=year_clean, y=total.patients.per.month,fill=independent)) +
+  geom_bar(position="stack", stat="identity") +
+  facet_wrap(~type, ncol=2) +
+  theme_bw() +
+  xlab("Year") +
+  scale_y_continuous(name="Number of pathways (per month)",labels = scales::comma) +
+  theme(legend.position="bottom",
+        panel.border = element_blank(),
+        strip.text = element_text(size=10),
+        text = element_text(size = 10),
+        legend.title=element_text(size=10),
+        legend.text=element_text(size=10),
+        axis.text = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
+        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
+        axis.title.y = element_text(size = 10))
+
+chart_1_1
+
+ggsave(plot=chart_1_1, paste0(R_workbench,"/Charts/","chart_1_1.png"), width = 20, height = 10, units = "cm")
+
+#Chart 1.2
+
+chart_1_2 <- chart_1_1_data %>%
+  filter(.,specialty %in% c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),independent=="IS") %>% 
+  mutate(year_clean=as.numeric(year_clean)) %>% 
+  ggplot(., aes(x=year_clean, y=pct_sector)) +
+  geom_line(aes(group=specialty,col=specialty),lwd=1.5)+
+  facet_wrap(~type, ncol=2) +
+  theme_bw() +
+  xlab("Year") +
+  scale_y_continuous(name="Percentage independent sector",labels = scales::percent) +
+  theme(legend.position="bottom",
+        panel.border = element_blank(),
+        strip.text = element_text(size=10),
+        text = element_text(size = 10),
+        legend.title=element_text(size=10),
+        legend.text=element_text(size=10),
+        axis.text = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
+        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
+        axis.title.y = element_text(size = 10))
+
+chart_1_2
+
+ggsave(plot=chart_1_2, paste0(R_workbench,"/Charts/","chart_1_2.png"), width = 20, height = 10, units = "cm")
+
 #################################################################
 ################### By deprivation, IS and pathway ################
 #################################################################
@@ -153,30 +232,30 @@ stats_two <- summary_one_wide %>%
 
 combinations.two <- expand.grid(months=all_months,
                                 imd=1:5,
-                                pathways=pathways[2:3],
-                                specialty=c("Total","Trauma and Orthopaedic","Ophtalmology","Dermatology"),
+                                pathways=pathways[1:3],
+                                specialty=c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),
                                 independent=c(0:2)) %>% varhandle::unfactor()
 
 #### Outputs
 
-out.combinations.two <- pbmapply(dashboard_stats_imd_quintile,
-                                 imd=combinations.two$imd,
-                                 monthyear=combinations.two$months,
-                                 type=combinations.two$pathways,
-                                 independent=combinations.two$independent,
-                                 specialty=combinations.two$specialty,
-                                 MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.two.df <- as.data.frame(t(out.combinations.two))
-rownames(out.combinations.two.df) <- 1:nrow(out.combinations.two.df)
-rm(combinations.two,out.combinations.two)
+# out.combinations.two <- pbmapply(dashboard_stats_imd_quintile,
+#                                  imd=combinations.two$imd,
+#                                  monthyear=combinations.two$months,
+#                                  type=combinations.two$pathways,
+#                                  independent=combinations.two$independent,
+#                                  specialty=combinations.two$specialty,
+#                                  MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
+# 
+# out.combinations.two.df <- as.data.frame(t(out.combinations.two))
+# rownames(out.combinations.two.df) <- 1:nrow(out.combinations.two.df)
+# rm(combinations.two,out.combinations.two)
 
 #### Save
 
-s3write_using(out.combinations.two.df # What R object we are saving
-              , FUN = fwrite # Which R function we are using to save
-              , object = paste0(RTT_subfolder,"/Summary tables/","Admitted by IMD and IS.csv") # Name of the file to save to (include file type)
-              , bucket = IHT_bucket) # Bucket name defined above
+# s3write_using(out.combinations.two.df # What R object we are saving
+#               , FUN = fwrite # Which R function we are using to save
+#               , object = paste0(RTT_subfolder,"/Summary tables/","Admitted by IMD and IS.csv") # Name of the file to save to (include file type)
+#               , bucket = IHT_bucket) # Bucket name defined above
 
 #### Load
 
@@ -250,6 +329,8 @@ chart_2_1 <- chart_2_1_data %>%
         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
         axis.title.y = element_text(size = 10))
 
+chart_2_1
+
 ggsave(plot=chart_2_1, paste0(R_workbench,"/Charts/","chart_2_1.png"), width = 20, height = 10, units = "cm")
 
 #Chart 2.2
@@ -275,5 +356,7 @@ chart_2_2 <- chart_2_1_data %>%
         axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
         axis.title.y = element_text(size = 10))
+
+chart_2_2
 
 ggsave(plot=chart_2_2, paste0(R_workbench,"/Charts/","chart_2_2.png"), width = 20, height = 10, units = "cm")
