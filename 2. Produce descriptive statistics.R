@@ -2,102 +2,144 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Cannot QA those pathways that are not part of the dashboard
+#When looking at time series and using IMD/Region splits, careful because these are CCG-based (e.g. CCGs in 2020) and
+#the number of providers will get lower when you go back in time (further from 2020)
+#because the CCGs didn't exist back then
 
-#Removing commsionner code NONC removes private patients
-#This is what the dashboard does
+#Proportion 52 weeks or more, why 0% before ~March 2021?
 
-#Does all deprivation data merge? (No, e.g. Cheshire)
+#Chart chart of IS/non-IS by specialty?
+
+#There are probably faster ways to reproduce dashboard metrics than using custom-written functions
 
 ##############################################
 ################### SETUP ####################
 ##############################################
 
-#Load packages
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(dplyr,stringr,sp,ggplot2,plyr,readODS,
-               gmodels,DescTools,data.table,rgdal,
-               tibble,leaflet,raster,plotly,
-               pbapply,pbmcapply,here,readxl,varhandle,
-               openxlsx)
+###### Libraries ######
+
+#Some of these might not be needed
+library(tidyverse)
+library(stringr)
+library(tidyr)
+library(purrr)
+library(pbapply)
+library(data.table)
+library(readr)
+library(readxl)
+library(aws.s3)
 
 #Clean up the global environment
 rm(list = ls())
 
-#Set directory where inputs are saved
+#Directories in S3
 
-#rawdatadir <- "/Users/sgpeytrignet/Documents"
-rawdatadir <- "M:/Analytics/Elective waiting times data"
-
-#Git directory
-gitdir <- dirname(rstudioapi::getSourceEditorContext()$path)
+IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
+RTT_subfolder <- "RTT waiting times data"
+R_workbench <- path.expand("~")
 
 #Useful functions
 only_letters <- function(x) { gsub("^([[:alpha:]]*).*$","\\1",x) }
 sumnarm <- function(x) { sum(x,na.rm=TRUE) }
+not_all_na <- function(x) any(!is.na(x))
 
-###################################################################################
-################### Import CCG-level deprivation data and geo lookup ##############
-###################################################################################
+#######################################################################################
+################### Import CCG-level deprivation data and region lookups ##############
+#######################################################################################
 
-CCG_to_IMD19_data <- fread(paste0(rawdatadir,"/Clean/CCG_to_IMD19_data.csv"), header=TRUE, sep=",", check.names=T)
+# IMD_by_CCG_wide <- s3read_using(fread
+#                               , object = paste0(RTT_subfolder,"/Custom RTT lookups/","IMD_by_CCG_wide.csv") # File to open
+#                               , bucket = IHT_bucket) # Bucket name defined above
+# 
+# Region_by_CCG_wide <- s3read_using(fread
+#                                 , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_wide.csv") # File to open
+#                                 , bucket = IHT_bucket) # Bucket name defined above
+
+provider_to_IMD_region <- s3read_using(fread
+                                       , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # File to open
+                                       , bucket = IHT_bucket) # Bucket name defined above
 
 #############################################################
 ################### Import monthly RTT data #################
 #############################################################
 
-RTT_allmonths <- fread(paste0(rawdatadir,"/Clean/RTT_allmonths.csv"), header=TRUE, sep=",", check.names=T)
+RTT_allmonths <- s3read_using(fread
+                              , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
+                              , bucket = IHT_bucket) # Bucket name defined above
 
-##### Identify commissioners from data that don't map to IMD or region
-##### (e.g. commissionning hubs)
+##########################################################
+################### Create new variables #################
+##########################################################
 
-all_commisioners <- select(RTT_allmonths,Commissioner.Org.Name,Commissioner.Org.Code) %>%
-  distinct(.)
+#### Merge in provider lookup
 
-ccgs_with_imd <- filter(CCG_to_IMD19_data,!is.na(IMD19_decile)) %>% select(.,CCG19CDH) %>% unique()
-ccgs_with_region <- filter(CCG_to_IMD19_data,!is.na(NHSER19NM)) %>% select(.,CCG19CDH) %>% unique()
-
-unmatched_ccgs <- filter(RTT_allmonths,(Commissioner.Org.Code %in% unlist(ccgs_with_imd))==FALSE) %>%
-  select(.,Commissioner.Org.Name,Commissioner.Org.Code) %>%
-  distinct(.)
-
-unmatched_regions <- filter(RTT_allmonths,(Commissioner.Org.Code %in% unlist(ccgs_with_region))==FALSE) %>%
-  select(.,Commissioner.Org.Name,Commissioner.Org.Code) %>%
-  distinct(.)
+RTT_allmonths <- RTT_allmonths %>% 
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code")
   
-#NHS_regions <- data.frame(NHSER19NM=unique(CCG_to_IMD19_data$NHSER19NM))
-# fwrite(unmatched_ccgs, file = paste0(rawdatadir,"/Clean/unmatched_ccgs.csv"), sep = ",")
-# fwrite(NHS_regions, file = paste0(rawdatadir,"/Clean/NHS_regions.csv"), sep = ",")
-
-##### Merge in location and deprivation
-
-RTT_allmonths <- left_join(RTT_allmonths,select(CCG_to_IMD19_data,CCG19CDH,IMD19_decile,IMD19_quintile,NHSER19NM),
-                           by=c("Commissioner.Org.Code"="CCG19CDH"))
-
 #### Create pathways variable
 
-RTT_allmonths$pathways <- mapvalues(RTT_allmonths$RTT.Part.Description,
-                                    from = c("Incomplete Pathways",
-                                             "Completed Pathways For Admitted Patients",
-                                             "Completed Pathways For Non-Admitted Patients",
-                                             "Incomplete Pathways with DTA",
-                                             "New RTT Periods - All Patients"),
-                                    to = c("incomplete",
-                                           "completeadmitted",
-                                           "completenonadmitted",
-                                           "incompleteDTA",
-                                           "newRTT"))
+RTT_allmonths <- RTT_allmonths %>%
+  mutate(.,pathways=case_when(
+    RTT.Part.Description=="Incomplete Pathways" ~ "incomplete",
+    RTT.Part.Description=="Completed Pathways For Admitted Patients" ~ "completeadmitted",
+    RTT.Part.Description=="Completed Pathways For Non-Admitted Patients" ~ "completenonadmitted",
+    RTT.Part.Description=="Incomplete Pathways with DTA" ~ "incompleteDTA",
+    RTT.Part.Description=="New RTT Periods - All Patients" ~ "newRTT",
+    TRUE ~ "NA"
+  ))
+
+#### Clean up specialty names
+
+RTT_allmonths <- RTT_allmonths %>%
+  mutate(.,Treatment.Function.Name=str_replace_all(Treatment.Function.Name," Service","")) %>%
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Ear, Nose & Throat (ENT)","Ear Nose and Throat",Treatment.Function.Name)) %>%
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Geriatric Medicine","Elderly Medicine",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Neurosurgical","Neurosurgery",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Trauma & Orthopaedics","Trauma and Orthopaedic",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Medicals","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Mental Healths","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Others","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Paediatrics","Other",Treatment.Function.Name)) %>% 
+  mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Surgicals","Other",Treatment.Function.Name))
+
+#### COVID-period (takes a long time to run)
+
+# RTT_allmonths <- RTT_allmonths %>%
+#   mutate(.,month_clean=word(Period,2,sep="-"),
+#          year_clean=word(Period,3,sep="-")) %>%
+#   mutate(date_clean=lubridate::dmy(paste(01,month_clean,year_clean,sep="/"))) %>%
+#   dplyr::dplyr::select(.,-c("month_clean","year_clean")) %>%
+#   mutate(.,COVID_timing=case_when(date_clean<lubridate::dmy("01-03-2020") ~ "Pre-COVID",
+#                                   date_clean>=lubridate::dmy("01-03-2020")&date_clean<lubridate::dmy("01-06-2021") ~ "COVID",
+#                                   date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
+#                                   TRUE ~ "NA"))
 
 #### Capture names of providers and specialties
 
-all_months <- unique(RTT_allmonths$monthyr)
-all_providers <- unique(RTT_allmonths$Provider.Org.Name) %>% c(.,"ENGLAND")
-providers_trusts <- all_providers[str_detect(all_providers, "TRUST")] %>% c(.,"ENGLAND")
-all_specialties <- unique(RTT_allmonths$Treatment.Function.Name)
-all_ccgs <- unique(RTT_allmonths$Commissioner.Org.Code[-which(RTT_allmonths$Commissioner.Org.Code==""|RTT_allmonths$Commissioner.Org.Code=="NONC")]) %>%
+all_months <- RTT_allmonths %>%
+  pull(monthyr) %>%
+  unique(.)
+
+all_providers <- RTT_allmonths %>%
+  pull(Provider.Org.Name) %>%
+  unique(.) %>%
   c(.,"ENGLAND")
+
+all_providers_trusts <- all_providers %>%
+  data.frame() %>% rename(.,all_providers_trusts=".") %>% 
+  filter(.,str_detect(all_providers_trusts, "TRUST")) %>%
+  pull() %>% c(.,"ENGLAND")
+  
+all_specialties <- RTT_allmonths %>%
+  pull(Treatment.Function.Name) %>%
+  unique(.)
+
+all_ccgs <-  RTT_allmonths %>%
+  filter(.,!(Commissioner.Org.Code %in% c("","NONC"))) %>% 
+  pull(Commissioner.Org.Code) %>%
+  unique(.) %>% c(.,"ENGLAND")
+
 pathways <- c("incomplete","completeadmitted","completenonadmitted","newRTT","incompleteDTA")
-regions <- unique(RTT_allmonths$NHSER19NM[-which(is.na(RTT_allmonths$NHSER19NM))])
 
 ###############################################################################
 ################### Reproduce dashboard metrics with functions ################
@@ -105,29 +147,25 @@ regions <- unique(RTT_allmonths$NHSER19NM[-which(is.na(RTT_allmonths$NHSER19NM))
 
 ############### By provider
 
-#Select ENGLAND as Provider name for England as summary
-#Select Total for all specialties within a single provider
-
-#Types are:
-
-#newRTT **NEW**
-#incomplete
-#incompleteDTA **NEW**
-#completeadmitted
-#completenonadmitted
-
-return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
-
-# monthyear <- "Aug20"
-# provider <- "ENGLAND"
-# specialty <- "Total"
-# quantiles <- c(0.95)
-# type <- "incomplete"
+dashboard_stats_provider <- function(monthyear,provider,specialty,quantiles,type){
+  
+  # monthyear="Dec18"
+  # provider="ENGLAND"
+  # specialty="Total"
+  # quantiles=c(0.50)
+  # type="incomplete"
   
   #Pick relevant month-year
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear)
   
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
+    names(.)
+    
   #If provider is England, use all rows and all providers
   
   dataset$Provider.Org.Name <- ifelse(rep(provider,nrow(dataset))=="ENGLAND",
@@ -163,6 +201,12 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
                            Commissioner.Org.Code!="NONC")
   }
   
+  #Is it an IS provider (that month)?
+  
+  IS_provider <- ifelse(provider=="ENGLAND",
+                        0,
+                        max(datasubset$IS_provider))
+  
   #Aggregate rows and compute total patients
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
@@ -171,8 +215,9 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     #But medians (and other stats) are computed using only the subset of patients
     #with a known start state
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <-  datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(dplyr::across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -186,8 +231,9 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     #For all incomplete pathways (waiting to start), reported totals omit those with unknown start date
     #AND medians (and other stats) are also computed using only the subset of patients
     #with a known start state
-
-    datasubset_sum <- datasubset %>% 
+    
+    datasubset_sum <-  datasubset %>%
+      dplyr::select(GT_names) %>% 
       summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
@@ -199,7 +245,7 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     #For New RTT (clock start this month) there are no data points in the waiting times
     #columns
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -217,12 +263,12 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -230,7 +276,8 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -240,6 +287,7 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     
     output <- data.frame(monthyear=as.character(monthyear),
                          provider=as.character(provider),
+                         IS=as.character(IS_provider),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          total.patients=total,
@@ -261,6 +309,7 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
     
     output <- data.frame(monthyear=as.character(monthyear),
                          provider=as.character(provider),
+                         IS=as.character(IS_provider),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          total.patients=total,
@@ -274,73 +323,29 @@ return_week_lower <- function(monthyear,provider,specialty,quantiles,type){
   return(output)
 }
 
-#This version of the function makes sure it still produces a result
-#if anything goes wrong
-
-return_week_lower_catch <- function(monthyear,provider,specialty,quantiles,type){
-  tryCatch(
-    {
-      return(return_week_lower(monthyear,provider,specialty,quantiles,type))
-    },
-    error=function(error_message) {
-      
-      output <- data.frame(monthyear=as.character(monthyear),
-                           provider=as.character(provider),
-                           specialty=as.character(specialty),
-                           type=as.character(type),
-                           total.patients=NA,
-                           number.18.or.less=NA,
-                           rate.18wks.or.less=NA,
-                           number.52.or.more=NA,
-                           rate.52wks.or.more=NA)
-      
-      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
-      colnames(weeks) <- paste0("weeks.",quantiles*100)
-      output <- cbind.data.frame(output,weeks)
-      rownames(output) <- 1
-      
-      return(output)
-    }
-  )
-}
-
-# return_week_lower_catch(monthyear="Aug20",
-#                   provider="ENGLAND",
-#                   specialty="Total",
-#                   quantiles=c(0.5,0.92,0.95),
-#                   type="completenonadmitted")
-
-# return_week_lower_catch(monthyear="Jun20",
-#                   provider="ENGLAND",
-#                   specialty="Dermatology",
-#                   quantiles=c(0.5,0.92,0.95),
-#                   type="completenonadmitted")
+#Example
+# dashboard_stats_provider(monthyear="Feb22",
+#                          provider="ENGLAND",
+#                          specialty="Total",
+#                          quantiles=c(0.50,0.95),
+#                          type="incomplete")
 
 ############### By CCG
 
-#Independent: 0 non-IS, 1 IS and 2 All
+#Independent sector: 0 non-IS, 1 IS and 2 All
 
-return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,independent){
-  
-  # monthyear <- "Aug20"
-  # ccg_code <- "10C"
-  # specialty <- "Total"
-  # quantiles <- c(0.50)
-  # type <- "completenonadmitted"
-  # independent <- 2
-  
-  #Fetch deprivation values and region from lookup
-  
-  IMD19_decile <- ifelse(length(filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$IMD19_decile)>0,
-                         filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$IMD19_decile,NA)
-  IMD19_quintile <- ifelse(length(filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$IMD19_quintile)>0,
-                           filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$IMD19_quintile,NA)
-  NHSER19NM <- ifelse(length(filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$NHSER19NM)>0,
-                      filter(CCG_to_IMD19_data,CCG19CDH==ccg_code)$NHSER19NM,NA)
+dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,independent){
   
   #Pick relevant month-year and filter out private patients
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
+    names(.)
   
   #If CCG is England, use all rows and all CCGs
   
@@ -354,7 +359,7 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
     ccg_name <- "ENGLAND"
   } else {
     ccg_name <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code==ccg_code) %>%
-      select(.,Commissioner.Org.Name) %>% unique(.) %>% unlist(.) %>% first(.)
+      dplyr::select(.,Commissioner.Org.Name) %>% unique(.) %>% unlist(.) %>% first(.)
   }
   
   #Filter based on type of provider
@@ -398,8 +403,9 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -410,15 +416,16 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
     
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
     
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -435,12 +442,12 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -448,7 +455,8 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -467,10 +475,7 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
                          rate.18wks.or.less=rate_18_or_less,
                          number.52.or.more=number_52_or_more,
                          rate.52wks.or.more=rate_52_or_more,
-                         weeks,
-                         IMD19_decile=as.character(IMD19_decile),
-                         IMD19_quintile=as.character(IMD19_quintile),
-                         NHSER19NM=as.character(NHSER19NM))
+                         weeks)
   } else if (total.nonmiss<20|type=="newRTT") {
     weeks <- rep(NA,length(quantiles))
     
@@ -489,73 +494,42 @@ return_week_lower_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,in
                          rate.18wks.or.less=NA,
                          number.52.or.more=NA,
                          rate.52wks.or.more=NA,
-                         weeks,
-                         IMD19_decile=as.character(IMD19_decile),
-                         IMD19_quintile=as.character(IMD19_quintile),
-                         NHSER19NM=as.character(NHSER19NM))
+                         weeks)
   }
   
   return(output)
 }
 
-#This version of the function makes sure it still produces a result
-#if anything goes wrong
+#Example
+# dashboard_stats_ccg(monthyear="Feb22",
+#                     ccg_code="ENGLAND",
+#                     specialty="Total",
+#                     quantiles=c(0.50,0.92),
+#                     type="incomplete",
+#                     independent=2)
 
-return_week_lower_ccg_catch <- function(monthyear,ccg_code,specialty,quantiles,type,independent){
-  tryCatch(
-    {
-      return(return_week_lower_ccg(monthyear,ccg_code,specialty,quantiles,type,independent))
-    },
-    error=function(error_message) {
-      
-      output <- data.frame(monthyear=as.character(monthyear),
-                           ccg=as.character(ccg_code),
-                           ccg_name=as.character(ccg_name),
-                           specialty=as.character(specialty),
-                           type=as.character(type),
-                           independent=NA,
-                           total.patients=NA,
-                           number.18.or.less=NA,
-                           rate.18wks.or.less=NA,
-                           number.52.or.more=NA,
-                           rate.52wks.or.more=NA)
-      
-      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
-      colnames(weeks) <- paste0("weeks.",quantiles*100)
-      output <- cbind.data.frame(output,weeks,IMD19_decile=NA,
-                                 IMD19_quintile=NA,
-                                 NHSER19NM=NA)
-      rownames(output) <- 1
-      
-      return(output)
-    }
-  )
-}
+############### By Region
 
-# return_week_lower_ccg_catch(monthyear="Jun20",
-#                       ccg="NHS CENTRAL LONDON (WESTMINSTER) CCG",
-#                       specialty="Total",quantiles=c(0.5,0.92,0.95),
-#                       type="incomplete",independent=2)
+#Independent sector: 0 non-IS, 1 IS and 2 All
 
-# return_week_lower_ccg_catch(monthyear="Aug20",
-#                       ccg="ENGLAND",
-#                       specialty="Total",quantiles=c(0.5,0.92,0.95),
-#                       type="incomplete",independent=2)
-
-############### By region
-
-return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,type,independent){
-  
-  # monthyear <- "Aug20"
-  # ccg_code <- "10C"
-  # specialty <- "Total"
-  # quantiles <- c(0.50)
-  # type <- "completenonadmitted"
-  # independent <- 2
+dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type,independent){
   
   #Pick relevant month-year and filter out private patients
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
+    names(.)
+  
+  #If regionname is England, use all rows and all regionname
+  
+  dataset$region <- ifelse(rep(regionname,nrow(dataset))=="ENGLAND",
+                                          rep("ENGLAND",nrow(dataset)),
+                                          dataset$region)
   
   #Filter based on type of provider
   
@@ -573,23 +547,23 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
   #Aggregate relevant variables
   
   if (type=="incomplete"){
-    datasubset <- filter(monthly_data,NHSER19NM==region_name&
+    datasubset <- filter(monthly_data,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways")
   } else if (type=="completeadmitted"){
-    datasubset <- filter(monthly_data,NHSER19NM==region_name&
+    datasubset <- filter(monthly_data,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Admitted Patients")
   } else if (type=="completenonadmitted"){
-    datasubset <- filter(monthly_data,NHSER19NM==region_name&
+    datasubset <- filter(monthly_data,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
   } else if (type=="incompleteDTA"){
-    datasubset <- filter(dataset,NHSER19NM==region_name&
+    datasubset <- filter(dataset,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways with DTA")
   } else if (type=="newRTT"){
-    datasubset <- filter(dataset,NHSER19NM==region_name&
+    datasubset <- filter(dataset,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="New RTT Periods - All Patients")
   }
@@ -598,8 +572,9 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -610,15 +585,16 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
     
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
     
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -635,12 +611,12 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -648,7 +624,8 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -657,7 +634,7 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
     #Function output
     
     output <- data.frame(monthyear=as.character(monthyear),
-                         region_name=as.character(region_name),
+                         regionname=as.character(regionname),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          independent=as.character(IS),
@@ -667,7 +644,6 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
                          number.52.or.more=number_52_or_more,
                          rate.52wks.or.more=rate_52_or_more,
                          weeks)
-    
   } else if (total.nonmiss<20|type=="newRTT") {
     weeks <- rep(NA,length(quantiles))
     
@@ -676,7 +652,7 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
     colnames(weeks) <- paste0("weeks.",quantiles*100)
     
     output <- data.frame(monthyear=as.character(monthyear),
-                         region_name=as.character(region_name),
+                         regionname=as.character(regionname),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          independent=as.character(IS),
@@ -691,53 +667,36 @@ return_week_lower_region <- function(monthyear,region_name,specialty,quantiles,t
   return(output)
 }
 
-return_week_lower_region_catch <- function(monthyear,region_name,specialty,quantiles,type,independent){
-  tryCatch(
-    {
-      return(return_week_lower_region(monthyear,region_name,specialty,quantiles,type,independent))
-    },
-    error=function(error_message) {
-      
-      output <- data.frame(monthyear=as.character(monthyear),
-                           region_name=as.character(region_name),
-                           specialty=as.character(specialty),
-                           type=as.character(type),
-                           independent=NA,
-                           total.patients=NA,
-                           number.18.or.less=NA,
-                           rate.18wks.or.less=NA,
-                           number.52.or.more=NA,
-                           rate.52wks.or.more=NA)
-      
-      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
-      colnames(weeks) <- paste0("weeks.",quantiles*100)
-      output <- cbind.data.frame(output,weeks)
-      rownames(output) <- 1
-      
-      return(output)
-    }
-  )
-}
+#Example
+# dashboard_stats_region(monthyear="Feb22",
+#                        regionname="London",
+#                     specialty="Total",
+#                     quantiles=c(0.50,0.92),
+#                     type="incomplete",
+#                     independent=2)
 
-# return_week_lower_region(monthyear="Dec18",
-#                       region_name="South West",
-#                       specialty="Oral Surgery",quantiles=c(0.5,0.92,0.95),
-#                       type="completeadmitted",independent=1)
+############### By IMD quintile
 
-############### By deprivation decile
+#Independent sector: 0 non-IS, 1 IS and 2 All
 
-return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,independent){
-  
-  # monthyear <- "Aug20"
-  # ccg_code <- "10C"
-  # specialty <- "Total"
-  # quantiles <- c(0.50)
-  # type <- "completenonadmitted"
-  # independent <- 2
+dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,independent){
   
   #Pick relevant month-year and filter out private patients
   
   dataset <- filter(RTT_allmonths,monthyr==monthyear&Commissioner.Org.Code!="NONC")
+  
+  #Which wait-time columns are filled in?
+  
+  GT_names <- dataset %>%
+    dplyr::select(starts_with("Gt")) %>%
+    dplyr::select(where(not_all_na)) %>%
+    names(.)
+  
+  #If regionname is England, use all rows and all regionname
+  
+  dataset$IMD19_quintile <- ifelse(rep(imd,nrow(dataset))=="ENGLAND",
+                           rep("ENGLAND",nrow(dataset)),
+                           dataset$IMD19_quintile)
   
   #Filter based on type of provider
   
@@ -755,23 +714,23 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
   #Aggregate relevant variables
   
   if (type=="incomplete"){
-    datasubset <- filter(monthly_data,IMD19_decile==decile&
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways")
   } else if (type=="completeadmitted"){
-    datasubset <- filter(monthly_data,IMD19_decile==decile&
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Admitted Patients")
   } else if (type=="completenonadmitted"){
-    datasubset <- filter(monthly_data,IMD19_decile==decile&
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
   } else if (type=="incompleteDTA"){
-    datasubset <- filter(dataset,IMD19_decile==decile&
+    datasubset <- filter(dataset,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways with DTA")
   } else if (type=="newRTT"){
-    datasubset <- filter(dataset,IMD19_decile==decile&
+    datasubset <- filter(dataset,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="New RTT Periods - All Patients")
   }
@@ -780,8 +739,9 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
   
   if (type=="completeadmitted"|type=="completenonadmitted"){
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     datasubset_unknown <- datasubset %>% 
       summarise(across(starts_with(c("Patients.with.unknown.clock.start.date")), sumnarm)) %>% t()
@@ -792,15 +752,16 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
     
   } else if (type=="incomplete"|type=="incompleteDTA") {
     
-    datasubset_sum <- datasubset %>% 
-      summarise(across(starts_with(c("Gt")), sumnarm)) %>% t()
+    datasubset_sum <- datasubset %>%
+      dplyr::select(GT_names) %>% 
+      summarise(dplyr::across(starts_with(c("Gt")), sumnarm)) %>% t()
     
     total <- sum(datasubset_sum,na.rm=TRUE)
     
     total.nonmiss <- total
   } else if (type=="newRTT"){
     
-    total <- datasubset %>% select(.,Total.All) %>% sum(.,na.rm=TRUE)
+    total <- datasubset %>% dplyr::select(.,Total.All) %>% sum(.,na.rm=TRUE)
     
     total.nonmiss <- total
   }
@@ -817,12 +778,12 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
       
       target <- quantiles[j]*total.nonmiss
       
-      auxmat <- data.frame(weeks=1:53,counts=datasubset_sum,
+      auxmat <- data.frame(weeks=1:nrow(datasubset_sum),counts=datasubset_sum,
                            cumsum=cumsum(datasubset_sum)) %>%
         mutate(.,above=ifelse(cumsum>=target,1,0),
                difference=(cumsum-target))
       
-      weeks[j] <- (filter(auxmat,above==1) %>% select(.,weeks) %>% min())-1
+      weeks[j] <- (filter(auxmat,above==1) %>% dplyr::select(.,weeks) %>% min())-1
     }
     
     weeks <- as.data.frame(weeks) %>% t()
@@ -830,7 +791,8 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
     
     #Return % of patients waiting 18 weeks or less
     
-    number_52_or_more <- datasubset_sum[53] %>% unlist()
+    number_52_or_less <- datasubset_sum[1:52,] %>% sum(.,na.rm=TRUE) %>%  unlist()
+    number_52_or_more <- total.nonmiss - number_52_or_less
     rate_52_or_more <- round(number_52_or_more/total.nonmiss*100,1) %>% unlist()
     
     number_18_or_less <- cumsum(datasubset_sum)[18] %>% unlist()
@@ -839,7 +801,7 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
     #Function output
     
     output <- data.frame(monthyear=as.character(monthyear),
-                         decile=as.character(decile),
+                         imd_quintile=as.character(imd),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          independent=as.character(IS),
@@ -849,7 +811,6 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
                          number.52.or.more=number_52_or_more,
                          rate.52wks.or.more=rate_52_or_more,
                          weeks)
-    
   } else if (total.nonmiss<20|type=="newRTT") {
     weeks <- rep(NA,length(quantiles))
     
@@ -858,7 +819,7 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
     colnames(weeks) <- paste0("weeks.",quantiles*100)
     
     output <- data.frame(monthyear=as.character(monthyear),
-                         decile=as.character(decile),
+                         imd_quintile=as.character(imd),
                          specialty=as.character(specialty),
                          type=as.character(type),
                          independent=as.character(IS),
@@ -873,226 +834,10 @@ return_week_lower_dep <- function(monthyear,decile,specialty,quantiles,type,inde
   return(output)
 }
 
-return_week_lower_dep_catch <- function(monthyear,decile,specialty,quantiles,type,independent){
-  tryCatch(
-    {
-      return(return_week_lower_dep(monthyear,decile,specialty,quantiles,type,independent))
-    },
-    error=function(error_message) {
-      
-      output <- data.frame(monthyear=as.character(monthyear),
-                           decile=as.character(decile),
-                           specialty=as.character(specialty),
-                           type=as.character(type),
-                           independent=NA,
-                           total.patients=NA,
-                           number.18.or.less=NA,
-                           rate.18wks.or.less=NA,
-                           number.52.or.more=NA,
-                           rate.52wks.or.more=NA)
-      
-      weeks <- data.frame(rep(NA,length(quantiles))) %>% t()
-      colnames(weeks) <- paste0("weeks.",quantiles*100)
-      output <- cbind.data.frame(output,weeks)
-      rownames(output) <- 1
-      
-      return(output)
-    }
-  )
-}
-
-# return_week_lower_dep_catch(monthyear="Aug20",
-#                       decile=5,
-#                       specialty="Total",quantiles=c(0.5,0.92,0.95),
-#                       type="incomplete",independent=2)
-
-########################################################################################
-################### Compute descriptive statistics for all combinations ################
-########################################################################################
-
-############### Create combinations for providers
-
-combinations <- expand.grid(all_months,
-                                    pathways,
-                                    all_providers,all_specialties) %>% varhandle::unfactor()
-names(combinations) <- c("monthyr","pathways","Provider.Org.Name","Treatment.Function.Name")
-
-observed_combinations <- paste(RTT_allmonths$monthyr,
-                               RTT_allmonths$Provider.Org.Name,
-                               RTT_allmonths$Treatment.Function.Name,
-                               RTT_allmonths$pathways,sep=" ")
-
-combinations <- filter(combinations, Provider.Org.Name=="ENGLAND" |
-paste(combinations$monthyr,combinations$Provider.Org.Name,
-      combinations$Treatment.Function.Name,
-      combinations$pathways,sep=" ") %in% observed_combinations)
-
-############### File 1: National and by specialty
-
-combinations.one <- filter(combinations,Provider.Org.Name=="ENGLAND")
-
-#combinations.one <- combinations.one[sample(1:nrow(combinations.one),10),]
-
-out.combinations.one <- pbmapply(return_week_lower_catch,
-                                 monthyear=combinations.one$monthyr,
-                                 type=combinations.one$pathways,
-                                 provider=combinations.one$Provider.Org.Name,
-                                 specialty=combinations.one$Treatment.Function.Name,
-                                 MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.one.df <- as.data.frame(t(out.combinations.one))
-rownames(out.combinations.one.df) <- 1:nrow(out.combinations.one.df)
-rm(combinations.one,out.combinations.one)
-
-#Clean up dates for Excel
-out.combinations.one.df$month <- only_letters(out.combinations.one.df$monthyear)
-out.combinations.one.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.one.df$monthyear))
-out.combinations.one.df$monthyear <- NULL
-
-############### File 2: National and by trust, combined specialties
-
-combinations.two <- filter(combinations,Provider.Org.Name %in% providers_trusts) %>%
-  filter(.,Treatment.Function.Name=="Total")
-
-#combinations.two <- combinations.two[sample(1:nrow(combinations.two),10),]
-
-out.combinations.two <- pbmapply(return_week_lower_catch,
-                                 monthyear=combinations.two$monthyr,
-                                 type=combinations.two$pathways,
-                                 provider=combinations.two$Provider.Org.Name,
-                                 specialty=combinations.two$Treatment.Function.Name,
-                                 MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.two.df <- as.data.frame(t(out.combinations.two))
-rownames(out.combinations.two.df) <- 1:nrow(out.combinations.two.df)
-rm(combinations.two,out.combinations.two)
-
-#Clean up dates for Excel
-out.combinations.two.df$month <- only_letters(out.combinations.two.df$monthyear)
-out.combinations.two.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.two.df$monthyear))
-out.combinations.two.df$monthyear <- NULL
-
-############### By CCG
-
-############### Create combinations for CCGs
-
-providertypes <- 0:2
-
-combinations.ccg <- expand.grid(all_months,
-                            pathways,
-                            all_ccgs,all_specialties,providertypes) %>% varhandle::unfactor()
-names(combinations.ccg) <- c("monthyr","pathways","Commissioner.Org.Code","Treatment.Function.Name","providertypes")
-
-observed_combinations.ccg <- paste(RTT_allmonths$monthyr,
-                                   RTT_allmonths$Commissioner.Org.Code,
-                                   RTT_allmonths$Treatment.Function.Name,
-                                   RTT_allmonths$pathways,sep=" ")
-
-combinations.ccg <- filter(combinations.ccg, Commissioner.Org.Code=="ENGLAND" |
-                         paste(combinations.ccg$monthyr,combinations.ccg$Commissioner.Org.Code,
-                               combinations.ccg$Treatment.Function.Name,
-                               combinations.ccg$pathways,sep=" ") %in% observed_combinations.ccg)
-
-############### File 3: National and by CCG, all specialties
-
-combinations.three <- filter(combinations.ccg,(Commissioner.Org.Code %in% all_ccgs)
-                               &Treatment.Function.Name=="Total")
-
-#combinations.three <- combinations.three[sample(1:nrow(combinations.three),10),]
-
-out.combinations.three <- pbmapply(return_week_lower_ccg_catch,
-                                   monthyear=combinations.three$monthyr,
-                                   independent=combinations.three$providertypes,
-                                   type = combinations.three$pathways,
-                                   ccg_code=combinations.three$Commissioner.Org.Code,
-                                   specialty=combinations.three$Treatment.Function.Name,
-                                   MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.three.df <- as.data.frame(t(out.combinations.three))
-rownames(out.combinations.three.df) <- 1:nrow(out.combinations.three.df)
-rm(combinations.three,out.combinations.three)
-
-#Clean up dates
-out.combinations.three.df$month <- only_letters(out.combinations.three.df$monthyear)
-out.combinations.three.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.three.df$monthyear))
-out.combinations.three.df$monthyear <- NULL
-
-############### Create combinations for regions
-
-providertypes <- 0:2
-
-combinations.region <- expand.grid(all_months,
-                                pathways,
-                                regions,all_specialties,providertypes) %>% varhandle::unfactor()
-names(combinations.region) <- c("monthyr","pathways","NHSER19NM","Treatment.Function.Name","providertypes")
-
-combinations.region <- filter(combinations.region,Treatment.Function.Name=="Total")
-
-#combinations.region <- combinations.region[sample(1:nrow(combinations.region),10),]
-
-############### File 4: By region, all specialties
-
-out.combinations.four <- pbmapply(return_week_lower_region_catch,
-                                   monthyear=combinations.region$monthyr,
-                                   independent=combinations.region$providertypes,
-                                   type = combinations.region$pathways,
-                                   region_name=combinations.region$NHSER19NM,
-                                   specialty=combinations.region$Treatment.Function.Name,
-                                   MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.four.df <- as.data.frame(t(out.combinations.four))
-rownames(out.combinations.four.df) <- 1:nrow(out.combinations.four.df)
-rm(combinations.region,out.combinations.four)
-
-#Clean up dates
-out.combinations.four.df$month <- only_letters(out.combinations.four.df$monthyear)
-out.combinations.four.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.four.df$monthyear))
-out.combinations.four.df$monthyear <- NULL
-
-############### Create combinations for deprivation decile
-
-providertypes <- 0:2
-
-deciles <- 1:10
-
-combinations.deciles <- expand.grid(all_months,
-                                   pathways,
-                                   deciles,all_specialties,providertypes) %>% varhandle::unfactor()
-names(combinations.deciles) <- c("monthyr","pathways","IMD19_decile","Treatment.Function.Name","providertypes")
-
-combinations.deciles <- filter(combinations.deciles,Treatment.Function.Name=="Total")
-
-#combinations.deciles <- combinations.deciles[sample(1:nrow(combinations.deciles),10),]
-
-############### File 5: By deprivation, all specialties
-
-out.combinations.five <- pbmapply(return_week_lower_dep_catch,
-                                  monthyear=combinations.deciles$monthyr,
-                                  independent=combinations.deciles$providertypes,
-                                  type = combinations.deciles$pathways,
-                                  decile=combinations.deciles$IMD19_decile,
-                                  specialty=combinations.deciles$Treatment.Function.Name,
-                                  MoreArgs = list(quantiles=c(0.5,0.92,0.95)))
-
-out.combinations.five.df <- as.data.frame(t(out.combinations.five))
-rownames(out.combinations.five.df) <- 1:nrow(out.combinations.five.df)
-rm(combinations.deciles,out.combinations.five)
-
-#Clean up dates
-out.combinations.five.df$month <- only_letters(out.combinations.five.df$monthyear)
-out.combinations.five.df$year <- paste0("20",tidyr::extract_numeric(out.combinations.five.df$monthyear))
-out.combinations.five.df$monthyear <- NULL
-
-########################################################
-################### Save to a worksheet ################
-########################################################
-
-list_of_datasets <- list("National, by specialty" = out.combinations.one.df,
-                         "National and Trust, comb spec" = out.combinations.two.df,
-                         "National, by IS and spec" = out.combinations.three.df,
-                         "Regional, by IS and all spec" = out.combinations.four.df,
-                         "By deprivation, by IS and all" = out.combinations.five.df)
-
-#Migrate metadata and first two from old file (CF extension)
-
-write.xlsx(list_of_datasets, file = paste0(rawdatadir,"/Clean/RTT - monthly series summarised region with central.xlsx"))
+#Example
+# dashboard_stats_imd_quintile(monthyear="Feb22",
+#                        imd="5",
+#                        specialty="Total",
+#                        quantiles=c(0.50,0.92),
+#                        type="incomplete",
+#                        independent=2)

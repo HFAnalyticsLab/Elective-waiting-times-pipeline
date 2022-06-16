@@ -2,73 +2,222 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
+#Dynamic or static approach to lookups?
+
+#EXTERNAL RESOURCES TO GET POSTCODES
+
+#https://geoportal.statistics.gov.uk/search?collection=Dataset&sort=name&tags=all(LUP_LSOA_CCG_LAD)
+#https://healthgps.co.uk/
+#has org codes and addresses
+#or use https://www.linkedin.com/pulse/using-data-from-google-r-studio-caleb-aguiar
+#Google API
+#or OMS
+
 ##############################################
 ################### SETUP ####################
 ##############################################
 
 #Load packages
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(dplyr,stringr,sp,ggplot2,plyr,readODS,
-               gmodels,DescTools,data.table,rgdal,
-               tibble,leaflet,raster,plotly,
-               pbapply,pbmcapply,here,readxl,varhandle)
+
+library(tidyverse)
+library(stringr)
+library(tidyr)
+library(pbapply)
+library(data.table)
+library(readr)
+library(readxl)
+library(janitor)
+library(aws.s3)
 
 #Clean up the global environment
 rm(list = ls())
 
-#Projection codes
-ukgrid = "+init=epsg:27700"
-latlong="+init=epsg:4326"
+#Directories in S3
 
-#Set directory where inputs are saved
-rawdatadir <- "M:/Analytics/Elective waiting times data"
+IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
+RTT_subfolder <- "RTT waiting times data"
+R_workbench <- path.expand("~")
 
-#Git directory
-gitdir <- dirname(rstudioapi::getSourceEditorContext()$path)
+##############################################################
+################### Mapping CCGs to deprivation ##############
+##############################################################
 
-#########################################################################
-################### Mapping CCGs to deprivation and region ##############
-#########################################################################
+#Load LSOA to CCG lookups
 
-# Columns in this file are as follows: 
-#   • CCG Code
-# • CCG Name
-# • RAvgRank = Rank of Average Rank
-# • RAvgScor = Rank of Average Score
-# • RPLMD10 = Rank of Proportion of LSOAs Most Deprived 10%
+LSOA11CD_to_CCG21 <-  s3read_using(fread
+             , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2021)_Lookup_in_England.csv") # File to open
+             , bucket = IHT_bucket)
 
-#Lookups
+LSOA11CD_to_CCG19 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2019)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket)
 
-#CCG_codes_NHS_ONS_lookup <- fread(paste0(rawdatadir,"/Lookups/Clinical_Commissioning_Groups_(April_2019)_Names_and_Codes_in_England.csv"), header=TRUE, sep=",", check.names=T,drop=1)
+LSOA11CD_to_CCG18 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2018)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket)
 
-CCG_to_higher <- fread(paste0(rawdatadir,"/Lookups/Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv"), header=TRUE, sep=",", check.names=T)
+LSOA11CD_to_CCG17 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2017)_Lookup_in_England_(Version_4).csv") # File to open
+                                   , bucket = IHT_bucket)
 
-manually_added <- fread(paste0(rawdatadir,"/Lookups/unmatched_ccgs_matched_central.csv"), header=TRUE, sep=",", check.names=T) %>%
-  filter(.,NHSER19NM!="") %>% rename(.,ccg19nm=Commissioner.Org.Name,CCG19CDH=Commissioner.Org.Code)
+#Join all CCG lookups
 
-#Deprivation data
+#Wide format
+LSOA11CD_to_CCG_joined_wide <- LSOA11CD_to_CCG21 %>%
+  select(.,LSOA11CD,CCG21CDH) %>% 
+  left_join(.,select(LSOA11CD_to_CCG19,LSOA11CD,CCG19CDH),by="LSOA11CD") %>% 
+  left_join(.,select(LSOA11CD_to_CCG18,LSOA11CD,CCG18CDH),by="LSOA11CD") %>%
+  left_join(.,select(LSOA11CD_to_CCG17,LSOA11CD,CCG17CDH),by="LSOA11CD")
+rm(LSOA11CD_to_CCG21,LSOA11CD_to_CCG19,LSOA11CD_to_CCG18,LSOA11CD_to_CCG17)
 
-CCG_to_IMD19 <- readOGR(dsn=paste0(rawdatadir,"/Shapefiles/Clinical_Commissioning_Group_(CCG)_IMD_2019_(OSGB1936)"), layer="c8aa66b8-d408-44b9-9641-ea45fb3344f02020315-1-68y7uz.trdmv")
+#Long format
 
-CCG_to_IMD19 <- spTransform(CCG_to_IMD19, CRS(latlong)) #Set to the same projection
+LSOA11CD_to_CCG_joined_long <- LSOA11CD_to_CCG_joined_wide %>%
+  pivot_longer(!LSOA11CD, names_to = "lookup_code", values_to = "CCGCDH") %>%
+  mutate(.,ccg_year=case_when(lookup_code %in% c("CCG21CDH") ~ "2021",
+                              lookup_code %in% c("CCG19CDH") ~ "2019",
+                              lookup_code %in% c("CCG18CDH") ~ "2018",
+                              lookup_code %in% c("CCG17CDH") ~ "2017",
+                              TRUE ~ "NA"))
 
-CCG_to_IMD19_data <- CCG_to_IMD19@data
+#Investigate duplicates
 
-#Create quintiles
+# LSOA11CD_to_CCG_joined %>%
+#   get_dupes(LSOA11CD)
 
-CCG_to_IMD19_data <- CCG_to_IMD19_data %>%
-  mutate(.,IMD19_decile = ntile(RAvgScor, 10),IMD19_quintile=ntile(RAvgScor, 5)) %>%
-  mutate(.,ccg19nm=toupper(ccg19nm))
+#Load IMD scores by LSOA
 
-#Merge in region data and NHS CCG codes
+LSOA11CD_to_IMD2019_raw <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/IMD 2019/","imd2019lsoa.csv") # File to open
+                                   , bucket = IHT_bucket)
+#High scores are decile 1
 
-CCG_to_IMD19_data <- left_join(CCG_to_IMD19_data,select(CCG_to_higher,CCG19CD,CCG19CDH,NHSER19CD,NHSER19NM),
-                               by=c("ccg19cd"="CCG19CD"))
+# LSOA11CD_to_IMD2019_raw %>%
+#   filter(.,Measurement %in% c("Score","Decile"),
+#          DateCode=="2019",
+#          `Indices of Deprivation`=="a. Index of Multiple Deprivation (IMD)") %>%
+#   select(.,FeatureCode,Measurement,Value) %>%
+#   pivot_wider(names_from = Measurement,
+#               names_sep = ".",
+#               values_from = c(Value)) %>%
+#   arrange(.,desc(Decile))
+  
+LSOA11CD_to_IMD2019 <- LSOA11CD_to_IMD2019_raw
 
-CCG_to_IMD19_data <- rbind.fill(CCG_to_IMD19_data,manually_added)
+LSOA11CD_to_IMD2019 <- LSOA11CD_to_IMD2019 %>%
+  filter(.,Measurement=="Score",DateCode=="2019",`Indices of Deprivation`=="a. Index of Multiple Deprivation (IMD)") %>%
+  select(.,FeatureCode,Value) %>%
+  rename(.,LSOA11CD="FeatureCode",
+         IMD19_score=Value)
+
+#Load population LSOA
+
+LSOA11CD_to_pop19 <-  s3read_using(read_excel
+                                     , object = paste0(RTT_subfolder,"/Population/","SAPE22DT2-mid-2019-lsoa-syoa-estimates-unformatted.xlsx") # File to open
+                                     , bucket = IHT_bucket,
+                                   sheet="Mid-2019 Persons",skip=4) 
+
+LSOA11CD_to_pop19 <- LSOA11CD_to_pop19 %>%
+  select(.,`LSOA Code`, `All Ages`) %>%
+  rename(.,LSOA11CD=`LSOA Code`,pop19= `All Ages`)
+
+#Merge lookups, IMD scores and population
+
+IMD_by_CCG_long <- LSOA11CD_to_CCG_joined_long %>%
+  left_join(.,LSOA11CD_to_IMD2019,by="LSOA11CD") %>%
+  left_join(.,LSOA11CD_to_pop19,by="LSOA11CD")
+
+#Aggregate by year and CCG
+
+IMD_by_CCG_long <- IMD_by_CCG_long %>%
+  group_by(ccg_year,lookup_code,CCGCDH) %>%
+  summarise(weighted_imd_score=weighted.mean(IMD19_score,pop19)) %>%
+  ungroup() %>%
+  group_by(ccg_year,lookup_code) %>%
+  mutate(IMD19_decile= 11 - ntile(weighted_imd_score, 10),
+         IMD19_quintile= 6 - ntile(weighted_imd_score, 5)) %>% #the '11 - x' transformation inverts the 1:10 scale
+  ungroup() %>%
+  select(.,ccg_year,lookup_code,CCGCDH,IMD19_decile,IMD19_quintile)
+
+IMD_by_CCG_wide <- IMD_by_CCG_long %>%
+  select(.,-"lookup_code") %>%
+  pivot_wider(
+    names_from = ccg_year,
+    names_sep = "_",
+    values_from = c("IMD19_decile","IMD19_quintile")
+  )
+  
+#Check direction of deciles is right
+# IMD_by_CCG_long %>%
+#   filter(.,ccg_year=="2021") %>%
+#   pull(IMD19_decile) %>%
+#   table(.,useNA="always")
 
 #######################################
 ################### Save ##############
 #######################################
 
-fwrite(CCG_to_IMD19_data, file = paste0(rawdatadir,"/Clean/CCG_to_IMD19_data.csv"), sep = ",")
+s3write_using(IMD_by_CCG_wide # What R object we are saving
+              , FUN = write.csv # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","IMD_by_CCG_wide.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+##############################################################
+################### Mapping CCGs to NHS Regions ##############
+##############################################################
+
+#Load LSOA to CCG lookups
+
+CCG_to_REG21 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England_(Region)_(April_2021)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2021") %>% rename(., CCGCDH=CCG21CDH,NHSERNM=NHSER21NM,STPNM=STP21NM)
+
+CCG_to_REG20 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England__Region___April_2020__Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2020") %>% rename(., CCGCDH=CCG20CDH,NHSERNM=NHSER20NM,STPNM=STP20NM)
+
+CCG_to_REG19 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2019") %>% rename(., CCGCDH=CCG19CDH,NHSERNM=NHSER19NM) #No STPs in 2019 and back
+
+CCG_to_REG18 <-  s3read_using(fread
+                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2018)_Lookup_in_England.csv") # File to open
+                                   , bucket = IHT_bucket) %>%
+  mutate(.,ccg_year="2018") %>% rename(., CCGCDH=CCG18CDH,NHSERNM=NHSER18NM)
+
+#2017 lookup doesn't have the CCG codes we need
+# CCG_to_REG17 <-  s3read_using(fread
+#                               , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2017)_Lookup_in_England_(Version_3).csv") # File to open
+#                               , bucket = IHT_bucket)
+
+#Join all CCG lookups
+
+#Long format
+CCG_NHSER_joined_long <- CCG_to_REG21 %>%
+  select(.,CCGCDH,ccg_year, NHSERNM,STPNM) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG20,CCGCDH,ccg_year, NHSERNM,STPNM)) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG19,CCGCDH,ccg_year, NHSERNM)) %>%
+  plyr::rbind.fill(.,select(CCG_to_REG18,CCGCDH,ccg_year, NHSERNM))
+
+#Wide format
+CCG_NHSER_joined_wide <- CCG_NHSER_joined_long %>%
+  pivot_wider( names_from = ccg_year,
+               names_sep = "_",
+               values_from = c(NHSERNM,STPNM))
+
+#######################################
+################### Save ##############
+#######################################
+
+s3write_using(CCG_NHSER_joined_long # What R object we are saving
+              , FUN = write.csv # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_long.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+s3write_using(CCG_NHSER_joined_wide # What R object we are saving
+              , FUN = write.csv # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_wide.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
