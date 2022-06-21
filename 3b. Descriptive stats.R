@@ -18,6 +18,7 @@ library(purrr)
 library(pbapply)
 library(data.table)
 library(readxl)
+library(ggrepel)
 library(aws.s3)
 
 #Clean up the global environment
@@ -42,12 +43,12 @@ source('2. Produce descriptive statistics.R')
 #### Combinations to run on
 
 combinations.one <- expand.grid(months=all_months,
-                            specialties=c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),
+                            specialties=all_specialties,
                             pathways=pathways[1:3],
                             independent=c(0:2),
                             ccg="ENGLAND") %>% varhandle::unfactor()
 #### Outputs
- 
+# 
 # out.combinations.one <- pbmapply(ccg_code=combinations.one$ccg,
 #                                  dashboard_stats_ccg,
 #                                  monthyear=combinations.one$months,
@@ -88,15 +89,87 @@ admitted.by.spec.is <- admitted.by.spec.is %>%
                                     date_clean>=lubridate::dmy("01-03-2020")&date_clean<lubridate::dmy("01-06-2021") ~ "COVID",
                                     date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
                                     TRUE ~ "NA"))
-  
-#### Summary one
 
+#Number of months per period
 mini_months_count <- admitted.by.spec.is %>%
   filter(.,specialty=="Total",type=="completenonadmitted",independent=="All") %>%
   arrange(date_clean) %>%
   group_by(COVID_timing) %>%
   summarise(n_months=n()) %>% #months_n is the number of months that contributed observations
   ungroup()
+
+################## Wait time analyis
+
+# opht_admitted <- admitted.by.spec.is %>%
+#   filter(.,type %in% c("completeadmitted")) %>%
+#   filter(., specialty=="Ophthalmology") %>%
+#   select(.,date_clean,ccg_name,specialty,type,independent,total.patients,
+#          rate.18wks.or.less,rate.52wks.or.more,weeks.50) %>%
+#   pivot_wider(
+#     names_from = independent,
+#     names_sep = ".",
+#     values_from = c(total.patients,rate.18wks.or.less,rate.52wks.or.more,weeks.50)
+#   ) %>%
+#   mutate(.,share_IS=total.patients.IS/total.patients.All*100)
+
+# opht_admitted %>%
+#   mutate(date_clean=as.Date(date_clean)) %>% 
+#   ggplot(.) +
+#   geom_line(aes(x=date_clean, y=share_IS/100),
+#             color="#69b3a2", size=1, alpha=0.9, linetype=1) +
+#   geom_line(aes(x=date_clean, y=rate.18wks.or.less.All/100),
+#             color="coral2", size=1, alpha=0.9, linetype=2) +
+#   facet_wrap(~type) +
+#   theme_bw() +
+#   scale_y_continuous(labels = scales::comma, name="Total pathways",
+#                      sec.axis = sec_axis(~./200000000, name = "Share of independent sector",labels = scales::percent))  +
+#   scale_x_date(name="Time",date_breaks = "3 months", date_labels = "%b %Y")
+
+scatter_plot_data_1 <- admitted.by.spec.is %>%
+  group_by(COVID_timing,specialty,type,independent) %>%
+  summarise(total.patients=sum(total.patients,na.rm=TRUE),
+            number.18.or.less=sum(number.18.or.less,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(.,rate.18wks.or.less=number.18.or.less/total.patients*100) %>%
+  select(-"number.18.or.less") %>% 
+  pivot_wider(names_from = independent,
+              names_sep = ".",
+              values_from = c(total.patients, rate.18wks.or.less)) %>%
+  mutate(.,pct_IS=total.patients.IS/total.patients.All*100) %>%
+  select(.,COVID_timing,specialty,type,pct_IS,rate.18wks.or.less.All) %>%
+  rename(.,rate.18wks.or.less=rate.18wks.or.less.All) %>%
+  janitor::clean_names() %>%
+  mutate(.,covid_timing=case_when(covid_timing=="COVID" ~ "during",
+                                  covid_timing=="Pre-COVID" ~ "pre",
+                                  covid_timing=="Post-COVID" ~ "post",
+                                  TRUE ~ "NA")) %>% 
+  pivot_wider(names_from = covid_timing,
+              names_sep = "_",
+              values_from = c(pct_is, rate_18wks_or_less)) %>%
+  mutate(.,delta_IS=(pct_is_post-pct_is_pre),
+         delta_wait=(rate_18wks_or_less_post-rate_18wks_or_less_pre))
+
+scatter_plot_1 <- scatter_plot_data_1 %>%
+  filter(.,specialty!="Total",type!="incomplete") %>%
+  ggplot(., aes(x=delta_IS, y=delta_wait)) +
+  geom_point(size=2, shape=23,color="blue4") +
+  geom_smooth(method=lm) + 
+  geom_text_repel(
+    mapping=aes(x=delta_IS, y=delta_wait,label=specialty),
+    size=3, size=6, box.padding = unit(0.5, "lines")
+  ) +
+  geom_hline(yintercept=0, color = "red") +
+  ggpubr::stat_cor(method = "pearson", label.x = 10, label.y = -10,size=3,col="blue4") +
+  scale_y_continuous(name=paste0("\u0394 of % waiting <18 wks\n(post vs. pre COVID)")) +
+  scale_x_continuous(name=paste0("\u0394 of % independent sector\n(post vs. pre COVID)")) +
+  facet_wrap(~type, ncol=2) +
+  theme_bw() 
+
+scatter_plot_1
+
+ggsave(plot=scatter_plot_1, paste0(R_workbench,"/Charts/","scatter_plot_1.png"), width = 20, height = 10, units = "cm")
+
+################## Summary one
 
 summary_one_wide <- admitted.by.spec.is %>%
   filter(.,independent!="All") %>%
@@ -141,16 +214,6 @@ summary_one_wide <- admitted.by.spec.is %>%
 #stat_is_growth_prepost 'percentage growth of volume in IS sector pre/post COVID'
 #stat_is_growth_vs_all_prepost 'how much volume in IS sector has changed, relative to size of specialty pre-COVID'
 #stat_delta_share_IS 'change in percentage points of IS share pre/post COVID'
-
-#Biggest change in % IS (in points)
-stats_one <- summary_one_wide %>%
-  arrange(type,desc(stat_delta_share_IS)) %>%
-  select(.,specialty,type,stat_delta_share_IS)
-
-#Biggest change in IS (relative to size of specialty pre-COVID)
-stats_two <- summary_one_wide %>%
-  arrange(type,desc(stat_is_growth_vs_all_prepost)) %>%
-  select(.,specialty,type,stat_is_growth_vs_all_prepost,stat_delta_share_IS)
 
 #Chart 1.1
 
@@ -200,7 +263,7 @@ ggsave(plot=chart_1_1, paste0(R_workbench,"/Charts/","chart_1_1.png"), width = 2
 #Chart 1.2
 
 chart_1_2 <- chart_1_1_data %>%
-  filter(.,specialty %in% c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),independent=="IS") %>% 
+  filter(.,specialty %in% c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology","Gastroenterology"),independent=="IS") %>% 
   mutate(year_clean=as.numeric(year_clean)) %>% 
   ggplot(., aes(x=year_clean, y=pct_sector)) +
   geom_line(aes(group=specialty,col=specialty),lwd=1.5)+
