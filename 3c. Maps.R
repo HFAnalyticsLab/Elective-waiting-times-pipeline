@@ -23,6 +23,8 @@ library(sp)
 library(leaflet)
 library(RColorBrewer)
 library(mapview)
+library(rgdal)
+library(stringi)
 
 #Clean up the global environment
 rm(list = ls())
@@ -74,6 +76,11 @@ provider_names <- provider_names %>%
   group_by(Provider.Org.Code) %>%
   summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
   ungroup()
+
+#Provider region
+provider_to_IMD_region <- s3read_using(fread
+                                       , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # File to open
+                                       , bucket = IHT_bucket) # Bucket name defined above
 
 #Monthly data
 RTT_allmonths <- s3read_using(fread
@@ -136,7 +143,8 @@ number_specialties_by_provider <- RTT_allmonths %>%
 
 #Ophthalmology
 ophthalmology_volumes <- RTT_allmonths %>%
-  filter(.,Treatment.Function.Name=="Ophthalmology") %>% #Total is not a specialty, we don't need to count it
+  filter(.,Treatment.Function.Name=="Ophthalmology",
+         RTT.Part.Description=="Completed Pathways For Admitted Patients") %>% 
   mutate(.,vol_pre_COVID=ifelse(toupper(Period) %in% pre_COVID,Total.All,NA),
          vol_during_COVID=ifelse(toupper(Period) %in% during_COVID,Total.All,NA),
          vol_post_COVID=ifelse(toupper(Period) %in% post_COVID,Total.All,NA)) %>% 
@@ -148,8 +156,19 @@ ophthalmology_volumes <- RTT_allmonths %>%
   mutate(.,opht_monthly_vol_pre_COVID=total_vol_pre_COVID/filter(mini_months_COVID,COVID_timing=="Pre")$n_months, #Monhly volumes
          opht_monthly_vol_during_COVID=total_vol_during_COVID/filter(mini_months_COVID,COVID_timing=="During")$n_months,
          opht_monthly_vol_post_COVID=total_vol_post_COVID/filter(mini_months_COVID,COVID_timing=="Post")$n_months) %>%
-  mutate(.,opht_prepost_COVID_pct_change=(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)/opht_monthly_vol_pre_COVID*100) %>%
+  mutate(.,opht_prepost_COVID_pct_change=(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)/opht_monthly_vol_pre_COVID*100,
+         opht_prepost_COVID=(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)) %>%
   select(.,Provider.Org.Code,starts_with("opht"))
+
+# ophthalmology_volumes %>%
+#   filter(.,opht_prepost_COVID<0) %>%
+#   pull(.,opht_prepost_COVID) %>%
+#   quantile(., probs = seq(0, 1, 1/3))
+# 
+# ophthalmology_volumes %>%
+#   filter(.,opht_prepost_COVID>=0) %>%
+#   pull(.,opht_prepost_COVID) %>%
+#   quantile(., probs = seq(0, 1, 1/3))
 
 # delta_data <- number_specialties_by_provider %>%
 #   select(.,Provider.Org.Code,Provider.Org.Name,monthly_vol_pre_COVID,monthly_vol_post_COVID,
@@ -159,6 +178,7 @@ ophthalmology_volumes <- RTT_allmonths %>%
 #Merge names and volumes in
 RTT_provider_locations <- RTT_provider_locations %>%
   left_join(.,provider_names,by="Provider.Org.Code") %>% #Add names
+  left_join(.,select(provider_to_IMD_region,Provider.Org.Code,region),by="Provider.Org.Code") %>% #Add region
   left_join(.,select(number_specialties_by_provider,Provider.Org.Code,IS_status,
                      number_specialties,spec_mix_map2,has_opht,total_vol_2122),by="Provider.Org.Code") %>%
   left_join(.,ophthalmology_volumes,by="Provider.Org.Code") 
@@ -169,93 +189,84 @@ RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$l
                                                   data=RTT_provider_locations,
                                                   proj4string = CRS(latlong))
 
+############################################################
+################### Data for Flourish map 1 ################
+############################################################
+
+#Import Region shapefile
+
+#Projection codes
+ukgrid = "+init=epsg:27700"
+latlong="+init=epsg:4326"
+
+#Read shapefile
+setwd(paste0(R_workbench,"/Shapefiles/Regions"))
+Region_shapefile <- readOGR(dsn=".", layer="RGN_DEC_2021_EN_BUC") 
+Region_shapefile <- spTransform(Region_shapefile, CRS(latlong))
+
+#Get centroids
+centroids <- rgeos::gCentroid(Region_shapefile, byid = TRUE)
+centroids_data <- data.frame(region=Region_shapefile@data$RGN21NM,
+                             lat=centroids@coords[,2],
+                             long=centroids@coords[,1]) %>%
+  mutate(.,lat=ifelse(region=="South East",50.8229,lat),
+         long=ifelse(region=="South East",0.1363,long))
+rm(centroids,Region_shapefile)
+
+#Flourish data
+flourish_region_data <- RTT_provider_locations %>%
+  filter(.,has_opht==1) %>%
+  group_by(region,IS_status) %>%
+  summarise(opht_monthly_vol_pre_COVID=sum(opht_monthly_vol_pre_COVID,na.rm=TRUE),
+            opht_monthly_vol_during_COVID=sum(opht_monthly_vol_during_COVID,na.rm=TRUE),
+            opht_monthly_vol_post_COVID=sum(opht_monthly_vol_post_COVID,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(COVID_delta=round(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID,0),
+         COVID_delta_abs=abs(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)) %>%
+  select(.,region,IS_status,COVID_delta,COVID_delta_abs) %>%
+  left_join(.,centroids_data,by="region") %>%
+  mutate(.,long.bis=ifelse(IS_status=="IS",long+0.2,long-0.2),
+         symbol=ifelse(COVID_delta<=0,"arrow-down","arrow-up"),
+         col=ifelse(IS_status=="IS","green","blue")) %>%
+  arrange(.,desc(COVID_delta_abs)) %>%
+  mutate(size_function=sqrt(COVID_delta_abs)*0.10) %>%
+  select(.,region,IS_status,lat,long.bis,size_function,symbol,col,COVID_delta) %>%
+  arrange(.,region,IS_status)
+
+# RTT_provider_locations %>%
+#   filter(.,has_opht==1) %>%
+#   group_by(region) %>%
+#   summarise(opht_monthly_vol_pre_COVID=sum(opht_monthly_vol_pre_COVID,na.rm=TRUE),
+#             opht_monthly_vol_during_COVID=sum(opht_monthly_vol_during_COVID,na.rm=TRUE),
+#             opht_monthly_vol_post_COVID=sum(opht_monthly_vol_post_COVID,na.rm=TRUE)) %>% 
+#   ungroup() %>%
+#   mutate(COVID_delta=round(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID,0))
+
+############################################################
+################### Data for Flourish map 2 ################
+############################################################
+
+# #Projection codes
+# ukgrid = "+init=epsg:27700"
+# latlong="+init=epsg:4326"
+# 
+# #Flourish data
+# flourish_animated_data <- RTT_allmonths %>%
+#   filter(.,Treatment.Function.Name=="Ophthalmology",
+#          RTT.Part.Description=="Completed Pathways For Admitted Patients") %>%
+#   select(.,Period,Provider.Org.Code,Provider.Org.Name,Total.All,IS_provider,monthyr) %>%
+#   left_join(.,select(RTT_provider_locations,Provider.Org.Code,lat,long),by="Provider.Org.Code") %>%
+#   mutate(.,year=paste0("20",str_sub(monthyr, start= -2)),
+#          month=tolower(word(Period,2,sep="-"))) %>%
+#   mutate(date_start=lubridate::ymd(paste(year,month,"01",sep="-"))) %>%
+#   mutate(date_end=lubridate::ceiling_date(date_start, "month") - lubridate::days(1)) %>% 
+#   mutate(log_size=log(Total.All+1))
+# 
+# fwrite(flourish_animated_data,paste0(R_workbench,"/Charts/flourish_animated_data.csv"))
+
 #####################################################
 ################### Map of providers ################
 #####################################################
-
-############ Delta volume - fixed by specialty (e.g. ophthalmology)
-
-#2019/20
-#2020/21
-#2021/22
-
-#Shape is round if IS
-#Shape is square/other if NHS
-
-#Colour is green if volume has gone up
-#Colour is red if it has gone down
-#Colour is grey if new provider? (could be green too)
-
-#Maybe fiddle with size (down the line)
-#Show only those active in 2021/22?
-#Size for pct increase is tricky because of NEW providers
-#Continuous color scale for increase is complicated because of Inf
-
-#Define subsets and add new variables
-RTT_providers_shapefile_opht <- subset(RTT_providers_shapefile,has_opht==1)
-RTT_providers_shapefile_opht@data$sqrt.volume <- (RTT_providers_shapefile_opht@data$total_vol_2122)^0.5
-RTT_providers_shapefile_opht@data$COVID_change <- ifelse(RTT_providers_shapefile_opht@data$opht_prepost_COVID_pct_change>0,"increase","decrease")
-RTT_providers_shapefile_opht <- subset(RTT_providers_shapefile_opht,!is.na(COVID_change))
-
-# RTT_providers_shapefile_opht_IS <- subset(RTT_providers_shapefile_opht,IS_status=="IS")
-# RTT_providers_shapefile_opht_NHS <- subset(RTT_providers_shapefile_opht,IS_status=="NHS")
-
-# Create a color palette with handmade bins
-
-levels0 <- unique(RTT_providers_shapefile_opht$COVID_change)
-mypalette0_cols <- brewer.pal(3, "Set1")[2:1]
-#mypalette2_cols[1] <- "#B2DF8A"
-mypalette0 <- colorFactor(palette=mypalette0_cols, levels=levels0,na.color = "#808080")
-# mypalette00 <- colorNumeric(
-#   palette = "YlGnBu",
-#   domain = RTT_providers_shapefile_opht$opht_prepost_COVID_pct_change
-# )
-
-# Prepare the text for the tooltip:
-
-mytext0 <- paste(
-  "Code: ", RTT_providers_shapefile_opht$Provider.Org.Code, "<br/>", 
-  "Name: ", RTT_providers_shapefile_opht$Provider.Org.Name, "<br/>",
-  "Specialty: ", RTT_providers_shapefile_opht$spec_mix_map2, "<br/>",
-  "Volume: ", formatC(RTT_providers_shapefile_opht$opht_monthly_vol_post_COVID, format="f", big.mark=",", digits=0), "<br/>",
-  sep="") %>%
-  lapply(htmltools::HTML)
-
-#Icons
-
-my_icons0 <- iconList(
-  NHS <- makeIcon(iconUrl = "https://www.freeiconspng.com/uploads/blue-circle-png-9.png",
-                  iconWidth = 10, iconHeight = 10),
-  IS <- makeIcon(iconUrl = "https://www.freeiconspng.com/uploads/triangle-png-28.png",
-                 iconWidth = 10, iconHeight = 10)
-)
-
-# Final Map
-#addLegend(pal=mypalette, values=~total_vol_2122, opacity=0.9, title = "Patient volume", position = "topright" )
-
-RTT_providers_shapefile_opht@data$IS_status_num <- ifelse(RTT_providers_shapefile_opht@data$IS_status=="NHS",1,2)
-
-html_legend <- "<img src='https://www.freeiconspng.com/uploads/blue-circle-png-9.png' style='width:10px;height:10px;'> NHS<br/>
-<img src='https://www.freeiconspng.com/uploads/triangle-png-28.png' style='width:10px;height:10px;'> IS"
-
-map_IS_providers0 <- leaflet(RTT_providers_shapefile_opht, options = leafletOptions(zoomControl = FALSE)) %>%
-  addProviderTiles("Stamen.TonerLite") %>%
-  addMarkers(lng = ~ long, lat = ~ lat, icon = ~ my_icons0[IS_status_num]) %>% 
-  addCircleMarkers(~long, ~lat, stroke = TRUE,
-                   color = "black",weight = 1,opacity = 0.3,
-                   fillColor = ~mypalette0(COVID_change), fillOpacity = 0.7, radius=8,
-                   label = mytext0,
-                   labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
-  addLegend(colors=mypalette0_cols, labels=levels0,
-            opacity=0.9, title = "Change pre/post COVID", position = "topright" ) %>%
-  addControl(html = html_legend, position = "topleft")
-
-?addMarkers
-?addControl
-map_IS_providers0
-
-mapshot(map_IS_providers0, file = paste0(R_workbench,"/Charts/","IS_providers_opth_growth.png"))
-
 
 ############ Volume
 
@@ -350,10 +361,6 @@ mapshot(map_IS_providers2, file = paste0(R_workbench,"/Charts/","IS_providers_sp
 
 #Read in data and merge
 
-provider_to_IMD_region <- s3read_using(fread
-                                       , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # File to open
-                                       , bucket = IHT_bucket) # Bucket name defined above
-
 RTT_allmonths <- RTT_allmonths %>% 
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code")
 
@@ -400,29 +407,6 @@ region_chart <-  region_table %>%
         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
         axis.title.y = element_text(size = 10))
 
-# region_chart <-  region_table %>%
-#   filter(IS_provider=="IS") %>%
-#   select(.,region,Total.All.Sectors,pct) %>%
-#   mutate(.,region=factor(region)) %>%  
-#   ggplot(.) +
-#   geom_col(aes(x = reorder(region,Total.All.Sectors), y = Total.All.Sectors), size = 1, color = "darkblue", fill = "white") +
-#   geom_line(aes(x = reorder(region,Total.All.Sectors), y = 250000000*pct), size = 1.5, color="red", group = 1) +
-#   scale_y_continuous(labels = scales::comma, name="Total pathways",
-#                      sec.axis = sec_axis(~./250000000, name = "Share of independent sector",labels = scales::percent)) +
-#   xlab("Region") +
-#   ggtitle("FY 2021/22") +
-#   theme_bw() +
-#   theme(panel.border = element_blank(),
-#         strip.text = element_text(size=10),
-#         text = element_text(size = 10),
-#         legend.title=element_text(size=10),
-#         legend.text=element_text(size=10),
-#         axis.text = element_text(size = 10),
-#         axis.text.y = element_text(size = 10),
-#         axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-#         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-#         axis.title.y = element_text(size = 10))
-
 region_chart
 
 ggsave(plot=region_chart, paste0(R_workbench,"/Charts/","region_chart.png"), width = 20, height = 10, units = "cm")
@@ -466,28 +450,6 @@ imd_chart <-  imd_table %>%
         axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
         axis.title.y = element_text(size = 10))
-
-# imd_chart <-  imd_table %>%
-#   filter(IS_provider=="IS") %>%
-#   mutate(.,IMD19_quintile=factor(IMD19_quintile)) %>%  
-#   ggplot(.) +
-#   geom_col(aes(x = reorder(imd_quintile,IMD19_quintile), y = Total.All.Sectors), size = 1, color = "darkblue", fill = "white") +
-#   geom_line(aes(x = reorder(imd_quintile,IMD19_quintile), y = 250000000*pct), size = 1.5, color="red", group = 1) +
-#   scale_y_continuous(labels = scales::comma, name="Total pathways",
-#                      sec.axis = sec_axis(~./250000000, name = "Share of independent sector",labels = scales::percent)) +
-#   xlab("Region") +
-#   ggtitle("FY 2021/22") +
-#   theme_bw() +
-#   theme(panel.border = element_blank(),
-#         strip.text = element_text(size=10),
-#         text = element_text(size = 10),
-#         legend.title=element_text(size=10),
-#         legend.text=element_text(size=10),
-#         axis.text = element_text(size = 10),
-#         axis.text.y = element_text(size = 10),
-#         axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-#         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-#         axis.title.y = element_text(size = 10))
 
 imd_chart
 
