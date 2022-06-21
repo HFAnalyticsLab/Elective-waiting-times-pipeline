@@ -53,6 +53,11 @@ plot_RTT(specialty = 'Total', type = 'completenonadmitted',
 
 plot_RTT(specialty = 'Rheumatology', type = 'incomplete')
 
+## lockdown period for charts:
+lockdown <- annotate('rect',
+                     xmin = as.Date(c('2020-03-26', '2020-11-05', '2021-01-06')),
+                     xmax = as.Date(c('2020-06-23', '2020-12-02', '2021-03-08')),
+                     ymin = 0, ymax = Inf, alpha = 0.4) 
 
 ### Comparison of volumes of care IS/NHS
 plot_RTT_comp <- function(ccg_code = 'ENGLAND',
@@ -135,8 +140,8 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme_minimal() +
           ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
           theme(plot.title = element_text(size = 10),
-                axis.title = element_text(size = 8))
-    
+                axis.title = element_text(size = 8)) +
+          lockdown
 }
 
   prop2 <- result$num18.or.less_noNA[result$independent == 'IS'] /
@@ -164,7 +169,8 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme_minimal() +
           ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
           theme(plot.title = element_text(size = 10),
-                axis.title = element_text(size = 8))
+                axis.title = element_text(size = 8)) +
+          lockdown
         
   }
   
@@ -173,14 +179,16 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     ggtitle(chart_title) +
     ylab('Proportion < 18 weeks') +
     theme_minimal() +
-    theme(axis.title = element_text(size = 8))
+    theme(axis.title = element_text(size = 8)) +
+    lockdown
   
   s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = Provider)) +
     geom_line(size=1) +
     ggtitle(chart_title) +
     ylab('Proportion > 52 weeks') +
     theme_minimal() +
-    theme(axis.title = element_text(size = 8))
+    theme(axis.title = element_text(size = 8)) +
+    lockdown
   
   plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'bottom') %>%
   annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type),
@@ -233,7 +241,7 @@ for (i in chart_pathway){
   for (j in all_specialties){
     
     plot_RTT_comp(specialty = j, type = i)
-    ggsave(paste0('Chart_', i, '_', j, '.png'), plot = last_plot())
+    ggsave(paste0('Charts/Chart_', i, '_', j, '.png'), plot = last_plot())
     
     print(paste0('Saved ', n, ' of ', length(chart_pathway) * length(all_specialties)))
     
