@@ -2,8 +2,6 @@
 ################### TO DO ################
 ##########################################
 
-#Re run to get March 22 data in
-
 ###########################################
 ################### Set-up ################
 ###########################################
@@ -98,32 +96,7 @@ mini_months_count <- admitted.by.spec.is %>%
   summarise(n_months=n()) %>% #months_n is the number of months that contributed observations
   ungroup()
 
-################## Wait time analyis
-
-# opht_admitted <- admitted.by.spec.is %>%
-#   filter(.,type %in% c("completeadmitted")) %>%
-#   filter(., specialty=="Ophthalmology") %>%
-#   select(.,date_clean,ccg_name,specialty,type,independent,total.patients,
-#          rate.18wks.or.less,rate.52wks.or.more,weeks.50) %>%
-#   pivot_wider(
-#     names_from = independent,
-#     names_sep = ".",
-#     values_from = c(total.patients,rate.18wks.or.less,rate.52wks.or.more,weeks.50)
-#   ) %>%
-#   mutate(.,share_IS=total.patients.IS/total.patients.All*100)
-
-# opht_admitted %>%
-#   mutate(date_clean=as.Date(date_clean)) %>% 
-#   ggplot(.) +
-#   geom_line(aes(x=date_clean, y=share_IS/100),
-#             color="#69b3a2", size=1, alpha=0.9, linetype=1) +
-#   geom_line(aes(x=date_clean, y=rate.18wks.or.less.All/100),
-#             color="coral2", size=1, alpha=0.9, linetype=2) +
-#   facet_wrap(~type) +
-#   theme_bw() +
-#   scale_y_continuous(labels = scales::comma, name="Total pathways",
-#                      sec.axis = sec_axis(~./200000000, name = "Share of independent sector",labels = scales::percent))  +
-#   scale_x_date(name="Time",date_breaks = "3 months", date_labels = "%b %Y")
+################## Wait time analysis
 
 scatter_plot_data_1 <- admitted.by.spec.is %>%
   group_by(COVID_timing,specialty,type,independent) %>%
@@ -152,7 +125,7 @@ scatter_plot_data_1 <- admitted.by.spec.is %>%
 scatter_plot_1 <- scatter_plot_data_1 %>%
   filter(.,specialty!="Total",type!="incomplete") %>%
   ggplot(., aes(x=delta_IS, y=delta_wait)) +
-  geom_point(size=2, shape=23,color="blue4") +
+  geom_point(shape=23,color="blue4") +
   geom_smooth(method=lm) + 
   geom_text_repel(
     mapping=aes(x=delta_IS, y=delta_wait,label=specialty),
@@ -169,7 +142,27 @@ scatter_plot_1
 
 ggsave(plot=scatter_plot_1, paste0(R_workbench,"/Charts/","scatter_plot_1.png"), width = 20, height = 10, units = "cm")
 
-################## Summary one
+################## Wait time analysis overall
+
+admitted.by.spec.is %>%
+  filter(., specialty %in% c("Ophthalmology"),
+         type %in% c("completeadmitted"))
+
+flourish_wait_time_series <- admitted.by.spec.is %>%
+  select(.,date_clean,specialty,type,independent,total.patients,rate.18wks.or.less,weeks.50) %>%
+  mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>%
+  filter(., specialty %in% c("Total","Ophthalmology"),
+         type %in% c("completenonadmitted","completeadmitted")) %>%
+  pivot_wider(
+    names_from = independent,
+    names_sep = ".",
+    values_from = c(total.patients,rate.18wks.or.less, weeks.50)
+  ) %>%
+  mutate(.,share_IS=total.patients.IS/total.patients.All*100) %>%
+  arrange(.,specialty,type,date_clean)
+fwrite(flourish_wait_time_series,paste0(R_workbench,"/Charts/flourish_wait_time_series.csv"))
+
+################## Summary one for Excel dashboard statistics
 
 summary_one_wide <- admitted.by.spec.is %>%
   filter(.,independent!="All") %>%
@@ -215,88 +208,16 @@ summary_one_wide <- admitted.by.spec.is %>%
 #stat_is_growth_vs_all_prepost 'how much volume in IS sector has changed, relative to size of specialty pre-COVID'
 #stat_delta_share_IS 'change in percentage points of IS share pre/post COVID'
 
-#Chart 1.1
-
-months_per_year <- admitted.by.spec.is %>%
-  group_by(year_clean) %>%
-  summarise(.,n_months=n_distinct(month_clean)) %>% 
-  ungroup()
-  
-chart_1_1_data <- admitted.by.spec.is %>%
-  filter(.,independent!="All") %>%
-  mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>% 
-  group_by(type,year_clean,specialty,independent) %>%
-  summarise(.,total.patients=sum(total.patients,na.rm=TRUE)) %>% 
-  ungroup() %>%
-  group_by(type,year_clean,specialty) %>%
-  mutate(.,total.patients.all=sum(total.patients,na.rm=TRUE)) %>% 
-  ungroup() %>%
-  left_join(.,months_per_year,by="year_clean") %>% 
-  mutate(.,total.patients.per.month=total.patients/n_months,
-         pct_sector=total.patients/total.patients.all)
-
-chart_1_1 <- chart_1_1_data %>%
-  filter(.,specialty=="Total") %>% 
-  mutate(year_clean=as.numeric(year_clean)) %>% 
-  ggplot(., aes(x=year_clean, y=total.patients.per.month,fill=independent)) +
-  geom_bar(position="stack", stat="identity") +
-  facet_wrap(~type, ncol=2) +
-  theme_bw() +
-  xlab("Year") +
-  scale_y_continuous(name="Number of pathways (per month)",labels = scales::comma) +
-  theme(legend.position="bottom",
-        panel.border = element_blank(),
-        strip.text = element_text(size=10),
-        text = element_text(size = 10),
-        legend.title=element_text(size=10),
-        legend.text=element_text(size=10),
-        axis.text = element_text(size = 10),
-        axis.text.y = element_text(size = 10),
-        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-        axis.title.y = element_text(size = 10))
-
-chart_1_1
-
-ggsave(plot=chart_1_1, paste0(R_workbench,"/Charts/","chart_1_1.png"), width = 20, height = 10, units = "cm")
-
-#Chart 1.2
-
-chart_1_2 <- chart_1_1_data %>%
-  filter(.,specialty %in% c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology","Gastroenterology"),independent=="IS") %>% 
-  mutate(year_clean=as.numeric(year_clean)) %>% 
-  ggplot(., aes(x=year_clean, y=pct_sector)) +
-  geom_line(aes(group=specialty,col=specialty),lwd=1.5)+
-  facet_wrap(~type, ncol=2) +
-  theme_bw() +
-  xlab("Year") +
-  scale_y_continuous(name="Percentage independent sector",labels = scales::percent) +
-  theme(legend.position="bottom",
-        panel.border = element_blank(),
-        strip.text = element_text(size=10),
-        text = element_text(size = 10),
-        legend.title=element_text(size=10),
-        legend.text=element_text(size=10),
-        axis.text = element_text(size = 10),
-        axis.text.y = element_text(size = 10),
-        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-        axis.title.y = element_text(size = 10))
-
-chart_1_2
-
-ggsave(plot=chart_1_2, paste0(R_workbench,"/Charts/","chart_1_2.png"), width = 20, height = 10, units = "cm")
-
-#################################################################
+###################################################################
 ################### By deprivation, IS and pathway ################
-#################################################################
+###################################################################
 
 #### Combinations to run on
 
 combinations.two <- expand.grid(months=all_months,
                                 imd=1:5,
                                 pathways=pathways[1:3],
-                                specialty=c("Total","Trauma and Orthopaedic","Ophthalmology","Dermatology"),
+                                specialty=all_specialties,
                                 independent=c(0:2)) %>% varhandle::unfactor()
 
 #### Outputs
@@ -343,7 +264,7 @@ admitted.by.imd.is <- admitted.by.imd.is %>%
                                   date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
                                   TRUE ~ "NA"))
 
-#### Summary one
+#### Summary two
 
 mini_months_count <- admitted.by.imd.is %>%
   filter(.,specialty=="Total",type=="completenonadmitted",independent=="All",imd_quintile==1) %>%
@@ -356,70 +277,16 @@ summary_two_wide <- admitted.by.imd.is %>%
   mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>%
   left_join(.,mini_months_count,by="COVID_timing") %>%
   group_by(specialty,type,imd_quintile,independent,year_clean) %>%
-  summarise(total.patients=sum(total.patients,na.rm=TRUE)) %>% 
+  summarise(total.patients=sum(total.patients,na.rm=TRUE),
+            number.18.or.less=sum(number.18.or.less,na.rm=TRUE)) %>% 
   ungroup() %>%
+  mutate(., pct_under_18wks=number.18.or.less/total.patients*100) %>%
+  select(-"number.18.or.less")
+
+summary_two_alt_wide <- summary_two_wide %>%
+  select(-"pct_under_18wks") %>% 
   pivot_wider(
     names_from = independent,
     names_sep = ".",
-    values_from = c(total.patients)
-  ) %>%
+    values_from = c(total.patients)) %>%
   mutate(.,pct_IS=IS/All*100)
-  
-#Chart 2.1 and chart 2.2
-
-#Chart 2.1
-
-chart_2_1_data <- summary_two_wide %>%
-  select(.,specialty,type,imd_quintile,year_clean,pct_IS) %>%
-  filter(.,specialty=="Total")
-
-chart_2_1 <- chart_2_1_data %>% 
-  ggplot(., aes(x=imd_quintile, y=pct_IS,col=type)) +
-  geom_line(size=1) +
-  facet_wrap(~year_clean, ncol=5) +
-  theme_bw() +
-  xlab("IMD quintile of provider - 1 (worst) to 5 (best)") +
-  ylab("% of patients treated in independent sector") +
-  theme(legend.position="bottom",
-        panel.border = element_blank(),
-        strip.text = element_text(size=10),
-        text = element_text(size = 10),
-        legend.title=element_text(size=10),
-        legend.text=element_text(size=10),
-        axis.text = element_text(size = 10),
-        axis.text.y = element_text(size = 10),
-        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-        axis.title.y = element_text(size = 10))
-
-chart_2_1
-
-ggsave(plot=chart_2_1, paste0(R_workbench,"/Charts/","chart_2_1.png"), width = 20, height = 10, units = "cm")
-
-#Chart 2.2
-
-chart_2_2 <- chart_2_1_data %>%
-  mutate(year_clean=as.numeric(year_clean),
-         imd_quintile=ifelse(imd_quintile==1,"1 (most deprived)",imd_quintile),
-         imd_quintile=ifelse(imd_quintile==5,"5 (least deprived)",imd_quintile)) %>% 
-  ggplot(., aes(x=year_clean, y=pct_IS,col=type)) +
-  geom_line(size=1) +
-  facet_wrap(~imd_quintile, ncol=5) +
-  theme_bw() +
-  xlab("Year") +
-  ylab("% of patients treated in independent sector") +
-  theme(legend.position="bottom",
-        panel.border = element_blank(),
-        strip.text = element_text(size=10),
-        text = element_text(size = 10),
-        legend.title=element_text(size=10),
-        legend.text=element_text(size=10),
-        axis.text = element_text(size = 10),
-        axis.text.y = element_text(size = 10),
-        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
-        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
-        axis.title.y = element_text(size = 10))
-
-chart_2_2
-
-ggsave(plot=chart_2_2, paste0(R_workbench,"/Charts/","chart_2_2.png"), width = 20, height = 10, units = "cm")

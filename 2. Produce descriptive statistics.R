@@ -2,14 +2,8 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#When looking at time series and using IMD/Region splits, careful because these are CCG-based (e.g. CCGs in 2020) and
-#the number of providers will get lower when you go back in time (further from 2020)
-#because the CCGs didn't exist back then
-
 #Proportion 52 weeks or more, why 0% before ~March 2021?
-
 #Chart chart of IS/non-IS by specialty?
-
 #There are probably faster ways to reproduce dashboard metrics than using custom-written functions
 
 ##############################################
@@ -103,16 +97,6 @@ RTT_allmonths <- RTT_allmonths %>%
   mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Surgicals","Other",Treatment.Function.Name))
 
 #### COVID-period (takes a long time to run)
-
-# RTT_allmonths <- RTT_allmonths %>%
-#   mutate(.,month_clean=word(Period,2,sep="-"),
-#          year_clean=word(Period,3,sep="-")) %>%
-#   mutate(date_clean=lubridate::dmy(paste(01,month_clean,year_clean,sep="/"))) %>%
-#   dplyr::dplyr::select(.,-c("month_clean","year_clean")) %>%
-#   mutate(.,COVID_timing=case_when(date_clean<lubridate::dmy("01-03-2020") ~ "Pre-COVID",
-#                                   date_clean>=lubridate::dmy("01-03-2020")&date_clean<lubridate::dmy("01-06-2021") ~ "COVID",
-#                                   date_clean>=lubridate::dmy("01-06-2021") ~ "Post-COVID",
-#                                   TRUE ~ "NA"))
 
 #### Capture names of providers and specialties
 

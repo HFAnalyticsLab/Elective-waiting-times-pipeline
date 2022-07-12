@@ -2,8 +2,6 @@
 ################### TO-DO ################
 ##########################################
 
-#Which providers are multi-specialty? Map by number of specialties or by main specialty
-
 ###########################################
 ################### Set-up ################
 ###########################################
@@ -25,6 +23,7 @@ library(RColorBrewer)
 library(mapview)
 library(rgdal)
 library(stringi)
+library(ggrepel)
 
 #Clean up the global environment
 rm(list = ls())
@@ -35,9 +34,6 @@ IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7
 RTT_subfolder <- "RTT waiting times data"
 R_workbench <- path.expand("~")
 localgit <- dirname(rstudioapi::getSourceEditorContext()$path)
-
-#Get raw data
-#source('2. Produce descriptive statistics.R')
 
 #Projection codes
 ukgrid = "+init=epsg:27700"
@@ -70,8 +66,6 @@ RTT_provider_locations <- s3read_using(fread
 provider_names <- s3read_using(fread
                                        , object = paste0(RTT_subfolder,"/Locating providers/","all_providers.csv") # File to open
                                        , bucket = IHT_bucket, header=TRUE) # Bucket name defined above
-
-#Remove duplicates
 provider_names <- provider_names %>%
   group_by(Provider.Org.Code) %>%
   summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
@@ -86,16 +80,6 @@ provider_to_IMD_region <- s3read_using(fread
 RTT_allmonths <- s3read_using(fread
                               , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
                               , bucket = IHT_bucket) # Bucket name defined above
-
-#Volume and IS status by provider in 2021-22
-# provider_volumes_IS_2122 <- RTT_allmonths %>%
-#   filter(.,Period %in% fy_202122) %>%
-#   filter(.,Treatment.Function.Name!="Total") %>% #Total is not a specialty
-#   group_by(Provider.Org.Code) %>%
-#   summarise(Provider.Org.Name=first(Provider.Org.Name),
-#             Total.All=sum(Total.All,na.rm=TRUE),
-#             IS=max(IS_provider)) %>%
-#   ungroup()
 
 #Number of months in data depending on COVID timing
 
@@ -141,128 +125,18 @@ number_specialties_by_provider <- RTT_allmonths %>%
   mutate(.,spec_mix_map2=ifelse(spec_mix_map=="Multi-specialty"&has_opht==1,"Multi-specialty (incl. opht.)",spec_mix_map)) %>% 
   mutate(.,spec_mix_map2=ifelse(spec_mix_map2=="Multi-specialty","Multi-specialty (no opht.)",spec_mix_map2))
 
-#Ophthalmology
-ophthalmology_volumes <- RTT_allmonths %>%
-  filter(.,Treatment.Function.Name=="Ophthalmology",
-         RTT.Part.Description=="Completed Pathways For Admitted Patients") %>% 
-  mutate(.,vol_pre_COVID=ifelse(toupper(Period) %in% pre_COVID,Total.All,NA),
-         vol_during_COVID=ifelse(toupper(Period) %in% during_COVID,Total.All,NA),
-         vol_post_COVID=ifelse(toupper(Period) %in% post_COVID,Total.All,NA)) %>% 
-  group_by(Provider.Org.Code) %>%
-  summarise(total_vol_pre_COVID=sum(vol_pre_COVID,na.rm=TRUE),
-            total_vol_during_COVID=sum(vol_during_COVID,na.rm=TRUE),
-            total_vol_post_COVID=sum(vol_post_COVID,na.rm=TRUE)) %>%
-  ungroup() %>%
-  mutate(.,opht_monthly_vol_pre_COVID=total_vol_pre_COVID/filter(mini_months_COVID,COVID_timing=="Pre")$n_months, #Monhly volumes
-         opht_monthly_vol_during_COVID=total_vol_during_COVID/filter(mini_months_COVID,COVID_timing=="During")$n_months,
-         opht_monthly_vol_post_COVID=total_vol_post_COVID/filter(mini_months_COVID,COVID_timing=="Post")$n_months) %>%
-  mutate(.,opht_prepost_COVID_pct_change=(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)/opht_monthly_vol_pre_COVID*100,
-         opht_prepost_COVID=(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)) %>%
-  select(.,Provider.Org.Code,starts_with("opht"))
-
-# ophthalmology_volumes %>%
-#   filter(.,opht_prepost_COVID<0) %>%
-#   pull(.,opht_prepost_COVID) %>%
-#   quantile(., probs = seq(0, 1, 1/3))
-# 
-# ophthalmology_volumes %>%
-#   filter(.,opht_prepost_COVID>=0) %>%
-#   pull(.,opht_prepost_COVID) %>%
-#   quantile(., probs = seq(0, 1, 1/3))
-
-# delta_data <- number_specialties_by_provider %>%
-#   select(.,Provider.Org.Code,Provider.Org.Name,monthly_vol_pre_COVID,monthly_vol_post_COVID,
-#          prepost_COVID_pct_change) %>%
-#   arrange(desc(prepost_COVID_pct_change))
-
 #Merge names and volumes in
 RTT_provider_locations <- RTT_provider_locations %>%
   left_join(.,provider_names,by="Provider.Org.Code") %>% #Add names
   left_join(.,select(provider_to_IMD_region,Provider.Org.Code,region),by="Provider.Org.Code") %>% #Add region
   left_join(.,select(number_specialties_by_provider,Provider.Org.Code,IS_status,
-                     number_specialties,spec_mix_map2,has_opht,total_vol_2122),by="Provider.Org.Code") %>%
-  left_join(.,ophthalmology_volumes,by="Provider.Org.Code") 
+                     number_specialties,spec_mix_map,spec_mix_map2,has_opht,total_vol_2122),by="Provider.Org.Code")
 
 #Turn into a shapefile
 RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$long,
                                                         RTT_provider_locations$lat),
                                                   data=RTT_provider_locations,
                                                   proj4string = CRS(latlong))
-
-############################################################
-################### Data for Flourish map 1 ################
-############################################################
-
-#Import Region shapefile
-
-#Projection codes
-ukgrid = "+init=epsg:27700"
-latlong="+init=epsg:4326"
-
-#Read shapefile
-setwd(paste0(R_workbench,"/Shapefiles/Regions"))
-Region_shapefile <- readOGR(dsn=".", layer="RGN_DEC_2021_EN_BUC") 
-Region_shapefile <- spTransform(Region_shapefile, CRS(latlong))
-
-#Get centroids
-centroids <- rgeos::gCentroid(Region_shapefile, byid = TRUE)
-centroids_data <- data.frame(region=Region_shapefile@data$RGN21NM,
-                             lat=centroids@coords[,2],
-                             long=centroids@coords[,1]) %>%
-  mutate(.,lat=ifelse(region=="South East",50.8229,lat),
-         long=ifelse(region=="South East",0.1363,long))
-rm(centroids,Region_shapefile)
-
-#Flourish data
-flourish_region_data <- RTT_provider_locations %>%
-  filter(.,has_opht==1) %>%
-  group_by(region,IS_status) %>%
-  summarise(opht_monthly_vol_pre_COVID=sum(opht_monthly_vol_pre_COVID,na.rm=TRUE),
-            opht_monthly_vol_during_COVID=sum(opht_monthly_vol_during_COVID,na.rm=TRUE),
-            opht_monthly_vol_post_COVID=sum(opht_monthly_vol_post_COVID,na.rm=TRUE)) %>% 
-  ungroup() %>%
-  mutate(COVID_delta=round(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID,0),
-         COVID_delta_abs=abs(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID)) %>%
-  select(.,region,IS_status,COVID_delta,COVID_delta_abs) %>%
-  left_join(.,centroids_data,by="region") %>%
-  mutate(.,long.bis=ifelse(IS_status=="IS",long+0.2,long-0.2),
-         symbol=ifelse(COVID_delta<=0,"arrow-down","arrow-up"),
-         col=ifelse(IS_status=="IS","green","blue")) %>%
-  arrange(.,desc(COVID_delta_abs)) %>%
-  mutate(size_function=sqrt(COVID_delta_abs)*0.10) %>%
-  select(.,region,IS_status,lat,long.bis,size_function,symbol,col,COVID_delta) %>%
-  arrange(.,region,IS_status)
-
-# RTT_provider_locations %>%
-#   filter(.,has_opht==1) %>%
-#   group_by(region) %>%
-#   summarise(opht_monthly_vol_pre_COVID=sum(opht_monthly_vol_pre_COVID,na.rm=TRUE),
-#             opht_monthly_vol_during_COVID=sum(opht_monthly_vol_during_COVID,na.rm=TRUE),
-#             opht_monthly_vol_post_COVID=sum(opht_monthly_vol_post_COVID,na.rm=TRUE)) %>% 
-#   ungroup() %>%
-#   mutate(COVID_delta=round(opht_monthly_vol_post_COVID-opht_monthly_vol_pre_COVID,0))
-
-############################################################
-################### Data for Flourish map 2 ################
-############################################################
-
-# #Projection codes
-# ukgrid = "+init=epsg:27700"
-# latlong="+init=epsg:4326"
-# 
-# #Flourish data
-# flourish_animated_data <- RTT_allmonths %>%
-#   filter(.,Treatment.Function.Name=="Ophthalmology",
-#          RTT.Part.Description=="Completed Pathways For Admitted Patients") %>%
-#   select(.,Period,Provider.Org.Code,Provider.Org.Name,Total.All,IS_provider,monthyr) %>%
-#   left_join(.,select(RTT_provider_locations,Provider.Org.Code,lat,long),by="Provider.Org.Code") %>%
-#   mutate(.,year=paste0("20",str_sub(monthyr, start= -2)),
-#          month=tolower(word(Period,2,sep="-"))) %>%
-#   mutate(date_start=lubridate::ymd(paste(year,month,"01",sep="-"))) %>%
-#   mutate(date_end=lubridate::ceiling_date(date_start, "month") - lubridate::days(1)) %>% 
-#   mutate(log_size=log(Total.All+1))
-# 
-# fwrite(flourish_animated_data,paste0(R_workbench,"/Charts/flourish_animated_data.csv"))
 
 #####################################################
 ################### Map of providers ################
@@ -271,127 +145,110 @@ flourish_region_data <- RTT_provider_locations %>%
 ############ Volume
 
 #Only for IS
-RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS==1&(!is.na(total_vol_2122)))
+RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&total_vol_2122>100)
 
-#See values
-table(RTT_providers_shapefile_IS$IS,useNA="always")
-hist(RTT_providers_shapefile_IS$total_vol_2122)
-quantile(RTT_providers_shapefile_IS$total_vol_2122, probs = seq(0, 1, 1/7))
-
-# Create a color palette with handmade bins
-quant_number <- 7
-
-mypalette <- colorQuantile("RdYlBu", RTT_providers_shapefile_IS$total_vol_2122, reverse = TRUE, n = quant_number)
-mypalette_cols <- brewer.pal(quant_number, "RdYlBu")[quant_number:1]
-quantiles <- quantile(RTT_providers_shapefile_IS$total_vol_2122, probs = seq(0, 1, 1/quant_number))
-quantiles_labels <- rep(NA,quant_number)
-for (j in 1:quant_number){
-  quantiles_labels[j] <- paste0(formatC(quantiles[j],format="f", big.mark=",", digits=0)," to ",
-                                formatC(quantiles[(j+1)],format="f", big.mark=",", digits=0))
-}
-
-# Prepare the text for the tooltip:
-mytext <- paste(
-  "Code: ", RTT_providers_shapefile_IS$Provider.Org.Code, "<br/>", 
-  "Name: ", RTT_providers_shapefile_IS$Provider.Org.Name, "<br/>",
-  "Volume: ", formatC(RTT_providers_shapefile_IS$total_vol_2122, format="f", big.mark=",", digits=0), "<br/>",
-  sep="") %>%
-  lapply(htmltools::HTML)
-
-# Final Map
-#addLegend(pal=mypalette, values=~total_vol_2122, opacity=0.9, title = "Patient volume", position = "topright" )
-
-map_IS_providers <- leaflet(RTT_providers_shapefile_IS, options = leafletOptions(zoomControl = FALSE)) %>%
-  addProviderTiles("Stamen.TonerLite") %>%
-  addCircleMarkers(~long, ~lat, stroke = TRUE,
-                   color = "black",weight = 1,opacity = 0.3,
-                   fillColor = ~mypalette(total_vol_2122), fillOpacity = 0.7, radius=6,
-                   label = mytext,
-                   labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")
-  ) %>%
-  addLegend(colors=mypalette_cols, labels=quantiles_labels,
-            opacity=0.9, title = "Patient volume in 2021/22", position = "topright" )
-
-map_IS_providers
-mapshot(map_IS_providers, file = paste0(R_workbench,"/Charts/","IS_providers_map_2122.png"))
-
-############ Volume and specialty mix
-
-#Only for IS and without small specialties
-RTT_providers_shapefile_specmap <- subset(RTT_providers_shapefile,(!is.na(total_vol_2122)),IS==1&(!(spec_mix_map2 %in% c("Urology","Other"))))
-RTT_providers_shapefile_specmap@data$sqrt.volume <- (RTT_providers_shapefile_specmap@data$total_vol_2122)^0.5
-
-# Create a color palette with handmade bins
-
-levels2 <- unique(RTT_providers_shapefile_specmap$spec_mix_map2)
-mypalette2_cols <- brewer.pal(length(unique(RTT_providers_shapefile_specmap$spec_mix_map2)), "Set1")
-#mypalette2_cols[1] <- "#B2DF8A"
-mypalette2 <- colorFactor(palette=mypalette2_cols, levels=levels2,na.color = "#808080")
-
-# Prepare the text for the tooltip:
-mytext2 <- paste(
-  "Code: ", RTT_providers_shapefile_specmap$Provider.Org.Code, "<br/>", 
-  "Name: ", RTT_providers_shapefile_specmap$Provider.Org.Name, "<br/>",
-  "Specialty: ", RTT_providers_shapefile_specmap$spec_mix_map2, "<br/>",
-  "Volume: ", formatC(RTT_providers_shapefile_specmap$total_vol_2122, format="f", big.mark=",", digits=0), "<br/>",
-  sep="") %>%
-  lapply(htmltools::HTML)
-
-# Final Map
-#addLegend(pal=mypalette, values=~total_vol_2122, opacity=0.9, title = "Patient volume", position = "topright" )
-
-map_IS_providers2 <- leaflet(RTT_providers_shapefile_specmap, options = leafletOptions(zoomControl = FALSE)) %>%
-  addProviderTiles("Stamen.TonerLite") %>%
-  addCircleMarkers(~long, ~lat, stroke = TRUE,
-                   color = "black",weight = 1,opacity = 0.3,
-                   fillColor = ~mypalette2(spec_mix_map2), fillOpacity = 0.7, radius=~sqrt.volume/30,
-                   label = mytext2,
-                   labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")
-  ) %>%
-  addLegend(colors=mypalette2_cols, labels=levels2,
-            opacity=0.9, title = "Specialty", position = "topright" )
+#Data for Flourish
+provider_map_flourish <- RTT_providers_shapefile_IS@data %>%
+  select(.,Provider.Org.Code,Provider.Postcode,lat,long,
+         Provider.Org.Name,region,IS_status,number_specialties,has_opht,
+         spec_mix_map,spec_mix_map2,total_vol_2122) %>%
+  mutate(log_volume=log(total_vol_2122),
+         sqrt_volume=(total_vol_2122)^0.5,
+         custom_volume=(total_vol_2122^0.35)/17,
+         has_opht_shape=ifelse(has_opht==1,"circle","square"))
   
-map_IS_providers2
+s3write_using(provider_map_flourish # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/Data for provider map 2122.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
 
-mapshot(map_IS_providers2, file = paste0(R_workbench,"/Charts/","IS_providers_spec_map_2122.png"))
+#############################################################
+################### Timeline of IS providers ################
+#############################################################
+
+provider_counts <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
+  mutate(.,year_clean=paste0("20",str_sub(monthyr, start= -2)),
+         month_clean=substr(monthyr, 1, 3)) %>%
+  mutate(.,date_clean=lubridate::ymd(paste(year_clean,month_clean,"01",sep="-"))) %>%
+  filter(.,Treatment.Function.Name %in% c("Total","Ophthalmology"),
+         RTT.Part.Description %in% c("Completed Pathways For Non-Admitted Patients",
+                                     "Completed Pathways For Admitted Patients")) %>%
+  mutate(.,independent=ifelse(IS_provider==1,"IS","NHS")) %>%
+  group_by(Treatment.Function.Name,year_clean,independent) %>%
+  summarise(nr_providers=n_distinct(Provider.Org.Code),
+            total_patients=sum(Total.All, na.rm=TRUE),
+            nr_months=n_distinct(month_clean)) %>% 
+  ungroup() %>%
+  mutate(.,patients_per_month=total_patients/nr_months) %>%
+  pivot_longer(!c("Treatment.Function.Name","year_clean","independent","nr_months"),
+               names_to = "Variable", values_to = "Count")
+
+provider_counts_chart_bis <- provider_counts %>%
+  filter(.,Variable %in% c("nr_providers","patients_per_month"),
+         independent=="IS",Treatment.Function.Name=="Ophthalmology") %>%
+  mutate(Count_alt=ifelse(year_clean=="2022"&Variable=="nr_providers",NA,Count)) %>%
+  arrange(Variable,year_clean) %>% 
+  ggplot(.,aes(y=Count_alt, x=year_clean,group=1)) +
+  geom_line(lwd=1.5) +
+  geom_label_repel(aes(label = round(Count_alt,1)),
+                                       nudge_x = 2,
+                                       nudge_y = 1,
+                                       na.rm = TRUE,size=3,alpha=0.7) +
+  facet_wrap(~Variable, scales = "free") +
+  scale_y_continuous(labels = scales::comma) +
+  xlab("Year") +
+  labs(fill = "IMD quintile") +
+  ggtitle("Complete pathways (admitted and non-admitted)") +
+  theme_dark()  +
+  theme(panel.border = element_blank(),
+        strip.text = element_text(size=10),
+        text = element_text(size = 10),
+        legend.title=element_text(size=10),
+        legend.text=element_text(size=10),
+        axis.text = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, hjust = 1,size = 10),
+        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 10),
+        axis.title.y = element_text(size = 10))
+
+provider_counts_chart_bis
+
+ggsave(plot=provider_counts_chart_bis, paste0(R_workbench,"/Charts/","provider_counts_chart_ophth.png"), width = 20, height = 10, units = "cm")
 
 ########################################################################
 ################### Summarise by region and deprivation ################
 ########################################################################
 
-#Read in data and merge
-
-RTT_allmonths <- RTT_allmonths %>% 
-  left_join(.,provider_to_IMD_region,by="Provider.Org.Code")
-
 #Comparison by region
 
 region_table <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
   filter(.,Period %in% fy_202122) %>%
-  group_by(region,IS_provider) %>%
   filter(Treatment.Function.Name=="Total") %>% 
+  group_by(region,RTT.Part.Description,IS_provider) %>%
   summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
-  group_by(region) %>%
+  group_by(region,RTT.Part.Description) %>%
   mutate(Total.All.Sectors=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
   mutate(.,pct=Total.All/Total.All.Sectors,
          IS_provider=ifelse(IS_provider==1,"IS","NHS"))
 
-ggplot(data, aes(fill=condition, y=value, x=specie)) + 
-  geom_bar(position="stack", stat="identity")
-
 region_chart <-  region_table %>%
-  select(.,region,IS_provider,Total.All,Total.All.Sectors,pct) %>%
+  select(.,region,RTT.Part.Description,IS_provider,Total.All,Total.All.Sectors,pct) %>%
+  filter(RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
+                                     "Completed Pathways For Non-Admitted Patients")) %>% 
   mutate(.,region=factor(region),
          pct_IS=ifelse(IS_provider=="IS",pct,NA)) %>%
   ggplot(.) +
   geom_bar(aes(fill=IS_provider, y=Total.All, x=reorder(region,Total.All.Sectors)),
            position="stack", stat="identity") +
-  geom_line(aes(x = reorder(region,Total.All.Sectors), y = 100000000*pct_IS,group = IS_provider),
+  geom_line(aes(x = reorder(region,Total.All.Sectors), y = 10000000*pct_IS,group = IS_provider),
             size = 1.5, color="red") +
+  facet_wrap(~RTT.Part.Description, ncol=2) +
   scale_y_continuous(labels = scales::comma, name="Total pathways",
-                     sec.axis = sec_axis(~./100000000, name = "Share of independent sector",labels = scales::percent)) +
+                     sec.axis = sec_axis(~./10000000, name = "Share of independent sector",labels = scales::percent)) +
   xlab("Region") +
   ggtitle("FY 2021/22") +
   labs(fill = "Sector") +
@@ -409,16 +266,22 @@ region_chart <-  region_table %>%
 
 region_chart
 
-ggsave(plot=region_chart, paste0(R_workbench,"/Charts/","region_chart.png"), width = 20, height = 10, units = "cm")
+ggsave(plot=region_chart, paste0(R_workbench,"/Charts/","region_chart.png"), width = 20, height = 9, units = "cm")
 
 #Comparison by IMD quintile
 
 imd_table <- RTT_allmonths %>%
-  filter(.,Period %in% fy_202122) %>%
-  group_by(IMD19_quintile,IS_provider) %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
+  filter(Treatment.Function.Name=="Total",
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
+                                     "Completed Pathways For Non-Admitted Patients"),
+         (Period %in% fy_202122)) %>% 
+  #mutate(year_clean=word(Period,3,sep="-")) %>%
+  mutate(year_clean="1") %>%
+  group_by(year_clean,RTT.Part.Description,IMD19_quintile,IS_provider) %>%
   summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
-  group_by(IMD19_quintile) %>%
+  group_by(year_clean,RTT.Part.Description,IMD19_quintile,) %>%
   mutate(Total.All.Sectors=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
   mutate(.,pct=Total.All/Total.All.Sectors,
@@ -432,12 +295,13 @@ imd_chart <-  imd_table %>%
   ggplot(.) +
   geom_bar(aes(fill=IS_provider, y=Total.All, x=reorder(imd_quintile,IMD19_quintile)),
            position="stack", stat="identity") +
-  geom_line(aes(x = reorder(imd_quintile,IMD19_quintile), y = 200000000*pct_IS,group = IS_provider),
+  geom_line(aes(x = reorder(imd_quintile,IMD19_quintile), y = 10000000*pct_IS,group = IS_provider),
             size = 1.5, color="red") +
+  facet_wrap(~RTT.Part.Description, ncol=2) +
   scale_y_continuous(labels = scales::comma, name="Total pathways",
-                     sec.axis = sec_axis(~./200000000, name = "Share of independent sector",labels = scales::percent))  +
-  xlab("Region") +
-  ggtitle("FY 2021/22") +
+                     sec.axis = sec_axis(~./10000000, name = "Share of independent sector",labels = scales::percent))  +
+  ggtitle("FY 2021-22") +
+  xlab("IMD") +
   labs(fill = "Sector") +
   theme_bw() +
   theme(panel.border = element_blank(),
