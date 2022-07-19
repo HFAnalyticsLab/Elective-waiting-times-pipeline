@@ -145,7 +145,7 @@ RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$l
 ############ Volume
 
 #Only for IS
-RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&total_vol_2122>100)
+RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&total_vol_2122>1000)
 
 #Data for Flourish
 provider_map_flourish <- RTT_providers_shapefile_IS@data %>%
@@ -171,9 +171,10 @@ provider_counts <- RTT_allmonths %>%
   mutate(.,year_clean=paste0("20",str_sub(monthyr, start= -2)),
          month_clean=substr(monthyr, 1, 3)) %>%
   mutate(.,date_clean=lubridate::ymd(paste(year_clean,month_clean,"01",sep="-"))) %>%
-  filter(.,Treatment.Function.Name %in% c("Total","Ophthalmology"),
+  filter(.,Treatment.Function.Name %in% c("Total","Ophthalmology","Gastroenterology"),
          RTT.Part.Description %in% c("Completed Pathways For Non-Admitted Patients",
                                      "Completed Pathways For Admitted Patients")) %>%
+  filter(., month_clean %in% c("Jan","Feb","Mar")) %>% 
   mutate(.,independent=ifelse(IS_provider==1,"IS","NHS")) %>%
   group_by(Treatment.Function.Name,year_clean,independent) %>%
   summarise(nr_providers=n_distinct(Provider.Org.Code),
@@ -214,43 +215,118 @@ provider_counts_chart_bis <- provider_counts %>%
 
 provider_counts_chart_bis
 
+26763/12949
+
 ggsave(plot=provider_counts_chart_bis, paste0(R_workbench,"/Charts/","provider_counts_chart_ophth.png"), width = 20, height = 10, units = "cm")
 
 ########################################################################
 ################### Summarise by region and deprivation ################
 ########################################################################
 
+#Source: https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/populationestimatesforukenglandandwalesscotlandandnorthernireland
+region_pop_2020 <- data.frame(region=c("NORTH EAST","NORTH WEST",
+                                        "YORKSHIRE AND THE HUMBER",
+                                        "EAST MIDLANDS","WEST MIDLANDS",
+                                        "EAST OF ENGLAND","LONDON",
+                                        "SOUTH EAST","SOUTH WEST"),
+                              pop20=c(2680763,7367456,
+                                      5526350,4865583,
+                                      5961929,6269161,
+                                      9002488,9217265,
+                                      5659143))
+
+region_pop_2020 <- region_pop_2020 %>%
+  mutate(region=str_to_title(region))
+
 #Comparison by region
 
-region_table <- RTT_allmonths %>%
+completed_region_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,Period %in% fy_202122) %>%
-  filter(Treatment.Function.Name=="Total") %>% 
-  group_by(region,RTT.Part.Description,IS_provider) %>%
+  filter(.,(Period %in% fy_202122),
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
+         Treatment.Function.Name=="Total") %>%
+  group_by(region,IS_provider) %>%
   summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
-  group_by(region,RTT.Part.Description) %>%
+  group_by(region) %>%
   mutate(Total.All.Sectors=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
+  mutate(region=str_to_title(region)) %>% 
+  left_join(.,region_pop_2020,by="region") %>% 
   mutate(.,pct=Total.All/Total.All.Sectors,
-         IS_provider=ifelse(IS_provider==1,"IS","NHS"))
+         IS_provider=ifelse(IS_provider==1,"IS","NHS"),
+         pathways_per_person=Total.All/pop20*100)
 
-region_chart <-  region_table %>%
-  select(.,region,RTT.Part.Description,IS_provider,Total.All,Total.All.Sectors,pct) %>%
-  filter(RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
-                                     "Completed Pathways For Non-Admitted Patients")) %>% 
+regions_casemix_table <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
+  filter(.,(Period %in% fy_202122),
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
+         Treatment.Function.Name!="Total") %>%
+  mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
+  group_by(region,IS_provider,Treatment.Function.Name) %>%
+  summarise(Total.All.Type.Treat=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(region,IS_provider) %>%
+  mutate(Total.All.Sectors=sum(Total.All.Type.Treat,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(.,pct_sector=Total.All.Type.Treat/Total.All.Sectors*100,
+         region=str_to_title(region)) %>% 
+  group_by(region,IS_provider) %>%
+  mutate(Treat.Small=ifelse(pct_sector<0,"Other",Treatment.Function.Name)) %>% 
+  ungroup() %>%
+  group_by(region,IS_provider,Treat.Small) %>%
+  summarise(pct_sector=sum(pct_sector),
+            Total.All.Type.Treat=sum(Total.All.Type.Treat),
+            Total.All.Sectors=first(Total.All.Sectors)) %>% 
+  ungroup() %>%
+  left_join(.,region_pop_2020,by="region") %>%
+  mutate(.,pathways_per_100_person=Total.All.Type.Treat/pop20*100)
+
+case_mix_chart <- regions_casemix_table %>%
+  ggplot(., aes(fill=Treat.Small, y=pathways_per_100_person, x=region, label=paste(round(pct_sector,0),"%"))) +
+  geom_bar(position="stack", stat="identity") +
+  geom_text(size = 1, position = position_stack(vjust = 0.5)) +
+  facet_wrap(~IS_provider,ncol=2) +
+  theme_bw() +
+  xlab("Sector") +
+  ylab("Completed pathways per 100 people (2021/22)") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position="bottom",
+        panel.border = element_blank(),
+        strip.text = element_text(size=5),
+        text = element_text(size = 5),
+        legend.title=element_text(size=5),
+        legend.text=element_text(size=5),
+        axis.text = element_text(size = 5),
+        axis.text.y = element_text(size = 5),
+        axis.text.x = element_text(angle = 45, hjust = 1,size = 5),
+        axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 5),
+        axis.title.y = element_text(size = 5))
+
+case_mix_chart
+
+ggsave(plot=case_mix_chart, paste0(R_workbench,"/Charts/","region_chart_casemix.png"), width = 20, height = 9, units = "cm")
+
+#Save data
+s3write_using(completed_region_table # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/completed_region_table.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+#Chart
+region_chart <-  completed_region_table %>%
+  select(.,region,IS_provider,Total.All,Total.All.Sectors,pathways_per_person,pct) %>%
   mutate(.,region=factor(region),
          pct_IS=ifelse(IS_provider=="IS",pct,NA)) %>%
   ggplot(.) +
-  geom_bar(aes(fill=IS_provider, y=Total.All, x=reorder(region,Total.All.Sectors)),
+  geom_bar(aes(fill=IS_provider, y=pathways_per_person, x=reorder(region,pathways_per_person)),
            position="stack", stat="identity") +
-  geom_line(aes(x = reorder(region,Total.All.Sectors), y = 10000000*pct_IS,group = IS_provider),
+  geom_line(aes(x = reorder(region,Total.All.Sectors), y = 100*pct_IS,group = IS_provider),
             size = 1.5, color="red") +
-  facet_wrap(~RTT.Part.Description, ncol=2) +
-  scale_y_continuous(labels = scales::comma, name="Total pathways",
-                     sec.axis = sec_axis(~./10000000, name = "Share of independent sector",labels = scales::percent)) +
+  scale_y_continuous(labels = scales::comma, name="Total pathways per 100 people",
+                     sec.axis = sec_axis(~./100, name = "Share of independent sector",labels = scales::percent)) +
   xlab("Region") +
-  ggtitle("FY 2021/22") +
+  ggtitle("FY 2021/22, completed pathways (admitted)") +
   labs(fill = "Sector") +
   theme_bw() +
   theme(panel.border = element_blank(),
@@ -268,39 +344,150 @@ region_chart
 
 ggsave(plot=region_chart, paste0(R_workbench,"/Charts/","region_chart.png"), width = 20, height = 9, units = "cm")
 
+#Heat map data
+
+regions_casemix_table <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
+  filter(.,(Period %in% fy_202122),
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
+                                     "Completed Pathways For Non-Admitted Patients")) %>%
+  mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
+  group_by(region,RTT.Part.Description,IS_provider,Treatment.Function.Name) %>%
+  summarise(Total.All.Type.Treat=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(region,IS_provider,RTT.Part.Description) %>%
+  mutate(Total.All.Sectors=sum(Total.All.Type.Treat,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(.,pct_sector=Total.All.Type.Treat/Total.All.Sectors*100,
+         region=str_to_title(region)) %>%
+  select(.,region,RTT.Part.Description,IS_provider,Treatment.Function.Name,Total.All.Type.Treat) %>%
+  pivot_wider(names_from = IS_provider,
+              names_sep = ".",
+              values_from = c(Total.All.Type.Treat)) %>%
+  mutate(.,All=`IS`+`NHS`,
+         pct_IS=`IS`/(`IS`+`NHS`)*100) %>%
+  group_by( RTT.Part.Description,Treatment.Function.Name) %>%
+  mutate(avg_IS=weighted.mean(pct_IS,All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  filter(Treatment.Function.Name %in% c("Total",
+                                        "Dermatology",
+                                        "Gastroenterology",
+                                        "General Internal Medicine",
+                                        "General Surgery",
+                                        "Gynaecology",
+                                        "Neurosurgery",
+                                        "Ophthalmology",
+                                        "Oral Surgery",
+                                        "Trauma and Orthopaedic",
+                                        "Urology")) %>% 
+  arrange(.,RTT.Part.Description,region,desc(avg_IS))
+
+england_casemix_table <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
+  filter(.,(Period %in% fy_202122),
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
+                                     "Completed Pathways For Non-Admitted Patients")) %>%
+  mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
+  group_by(RTT.Part.Description,IS_provider,Treatment.Function.Name) %>%
+  summarise(Total.All.Type.Treat=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(IS_provider,RTT.Part.Description) %>%
+  mutate(Total.All.Sectors=sum(Total.All.Type.Treat,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(.,pct_sector=Total.All.Type.Treat/Total.All.Sectors*100) %>%
+  select(.,RTT.Part.Description,IS_provider,Treatment.Function.Name,Total.All.Type.Treat) %>%
+  pivot_wider(names_from = IS_provider,
+              names_sep = ".",
+              values_from = c(Total.All.Type.Treat)) %>%
+  mutate(.,All=`IS`+`NHS`,
+         pct_IS=`IS`/(`IS`+`NHS`)*100) %>%
+  group_by(RTT.Part.Description,Treatment.Function.Name) %>%
+  mutate(avg_IS=weighted.mean(pct_IS,All,na.rm=TRUE),
+         region="England") %>% 
+  ungroup() %>%
+  filter(Treatment.Function.Name %in% c("Total",
+                                        "Dermatology",
+                                        "Gastroenterology",
+                                        "General Internal Medicine",
+                                        "General Surgery",
+                                        "Gynaecology",
+                                        "Neurosurgery",
+                                        "Ophthalmology",
+                                        "Oral Surgery",
+                                        "Trauma and Orthopaedic",
+                                        "Urology")) %>% 
+  arrange(.,RTT.Part.Description,region,desc(avg_IS))
+
+casemix_table <- plyr::rbind.fill(regions_casemix_table,england_casemix_table) %>%
+  mutate(.,region_order=case_when(region=="England" ~ "1",
+                                   region=="North East" ~ "2",
+                                   region=="North West" ~ "3",
+                                   region=="Yorkshire And The Humber" ~ "4",
+                                   region=="East Midlands" ~ "5",
+                                   region=="West Midlands" ~ "6",
+                                   region=="East Of England" ~ "7",
+                                   region=="London" ~ "8",
+                                   region=="South East" ~ "9",
+                                   region=="South West" ~ "10",
+                                   TRUE ~ "NA"),
+         Pathway=ifelse(RTT.Part.Description=="Completed Pathways For Admitted Patients",
+                        "Admitted","Non-admitted"),
+         avg_IS=ifelse(Treatment.Function.Name=="Total",1000,avg_IS)) %>%
+  arrange(Pathway,as.numeric(region_order),desc(avg_IS)) %>%
+  rename(Specialty="Treatment.Function.Name",
+         `Proportion of care delivered by the independent sector 2021/22`="pct_IS") %>% 
+  select(.,region,Pathway,Specialty,`Proportion of care delivered by the independent sector 2021/22`)
+
+#Save data
+s3write_using(casemix_table # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/regions_casemix_table.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
 #Comparison by IMD quintile
 
-imd_table <- RTT_allmonths %>%
+#Source: https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/adhocs/13773populationsbyindexofmultipledeprivationimddecileenglandandwales2020
+imd_pop_2020 <- data.frame(imd_quintile=c("1 (most deprived)",2:4,"5 (least deprived)"),
+                              pop20=c(11301143,11629843,
+                                      11485024,11177974,10956154))
+
+completed_imd_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
   filter(Treatment.Function.Name=="Total",
-         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
-                                     "Completed Pathways For Non-Admitted Patients"),
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
          (Period %in% fy_202122)) %>% 
   #mutate(year_clean=word(Period,3,sep="-")) %>%
   mutate(year_clean="1") %>%
-  group_by(year_clean,RTT.Part.Description,IMD19_quintile,IS_provider) %>%
+  group_by(year_clean,IMD19_quintile,IS_provider) %>%
   summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
-  group_by(year_clean,RTT.Part.Description,IMD19_quintile,) %>%
+  group_by(year_clean,IMD19_quintile) %>%
   mutate(Total.All.Sectors=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
   mutate(.,pct=Total.All/Total.All.Sectors,
          IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
   mutate(imd_quintile=ifelse(IMD19_quintile=="1","1 (most deprived)",IMD19_quintile)) %>%
-  mutate(imd_quintile=ifelse(IMD19_quintile=="5","5 (least deprived)",imd_quintile))
+  mutate(imd_quintile=ifelse(IMD19_quintile=="5","5 (least deprived)",imd_quintile)) %>%
+  left_join(.,imd_pop_2020,by="imd_quintile") %>%
+  mutate(.,pathways_per_person=Total.All/pop20*100)
 
-imd_chart <-  imd_table %>%
+#Save data
+s3write_using(completed_imd_table # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/completed_imd_table.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
+imd_chart <-  completed_imd_table %>%
   mutate(.,IMD19_quintile=factor(IMD19_quintile),
          pct_IS=ifelse(IS_provider=="IS",pct,NA)) %>%
   ggplot(.) +
-  geom_bar(aes(fill=IS_provider, y=Total.All, x=reorder(imd_quintile,IMD19_quintile)),
+  geom_bar(aes(fill=IS_provider, y=pathways_per_person, x=reorder(imd_quintile,IMD19_quintile)),
            position="stack", stat="identity") +
-  geom_line(aes(x = reorder(imd_quintile,IMD19_quintile), y = 10000000*pct_IS,group = IS_provider),
+  geom_line(aes(x = reorder(imd_quintile,IMD19_quintile), y = 100*pct_IS,group = IS_provider),
             size = 1.5, color="red") +
-  facet_wrap(~RTT.Part.Description, ncol=2) +
-  scale_y_continuous(labels = scales::comma, name="Total pathways",
-                     sec.axis = sec_axis(~./10000000, name = "Share of independent sector",labels = scales::percent))  +
-  ggtitle("FY 2021-22") +
+  scale_y_continuous(labels = scales::comma, name="Total pathways per 100 people",
+                     sec.axis = sec_axis(~./100, name = "Share of independent sector",labels = scales::percent))  +
+  ggtitle("FY 2021-22, completed pathways (admitted)") +
   xlab("IMD") +
   labs(fill = "Sector") +
   theme_bw() +
