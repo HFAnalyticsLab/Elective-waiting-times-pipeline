@@ -51,7 +51,7 @@ plot_RTT(specialty = 'Total', type = 'completenonadmitted',
          chart_title = 'Total patients on completed pathways that have been admitted')
 
 
-plot_RTT(specialty = 'Rheumatology', type = 'incomplete')
+plot_RTT(specialty = 'Rheumatology', type = 'completeadmitted')
 
 ## lockdown period for charts:
 lockdown <- annotate('rect',
@@ -174,10 +174,10 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
         
   }
   
-  r <- ggplot(result, aes(x = date, y = rate.18wks.or.less, colour = Provider)) +
+  r <- ggplot(result, aes(x = date, y = weeks.50, colour = Provider)) +
     geom_line(size=1) +
     ggtitle(chart_title) +
-    ylab('Proportion < 18 weeks') +
+    ylab('Median weeks') +
     theme_minimal() +
     theme(axis.title = element_text(size = 8)) +
     lockdown
@@ -204,7 +204,9 @@ plot_RTT_comp(specialty = 'Total', type = 'incompleteDTA')
 plot_RTT_comp(specialty = 'Total', type = 'newRTT')
 
 plot_RTT_comp(specialty = 'Cardiology', type = 'incomplete')
-plot_RTT_comp(specialty = 'Cardiology', type = 'completeadmitted')
+plot_RTT_comp(specialty = 'Gastroenterology', type = 'completeadmitted')
+plot_RTT_comp(specialty = 'Gastroenterology', type = 'completenonadmitted')
+
 plot_RTT_comp(specialty = 'Cardiology', type = 'completenonadmitted')
 plot_RTT_comp(specialty = 'Cardiology', type = 'incompleteDTA')
 plot_RTT_comp(specialty = 'Cardiology', type = 'newRTT')
