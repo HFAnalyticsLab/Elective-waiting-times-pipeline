@@ -62,14 +62,11 @@ all_providers <- s3read_using(fread
                               , object = paste0(RTT_subfolder,"/Locating providers/","all_providers.csv") # File to open
                               , bucket = IHT_bucket, header=TRUE, drop=1) # Bucket name defined above
 
-#Remove duplicates
+#Remove duplicates: all 500 are here
 all_providers <- all_providers %>%
   group_by(Provider.Org.Code) %>%
   summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
   ungroup()
-
-#all_providers_sample <- all_providers[sample(1:nrow(all_providers),50,replace=FALSE),]
-#all_providers_sample <- all_providers
 
 ################################################
 ################### Load NHS data ##############
@@ -134,7 +131,7 @@ all_providers_with_nhs_loc <- left_join(all_providers,nhs.providers,by=c("Provid
 missing_providers <- all_providers_with_nhs_loc %>%
   filter(.,is.na(pcode)) %>%
   pull(Provider.Org.Code)
- 
+
 #Search for postcodes
 
 search_postcode_google <- function(orgcode,type){
@@ -250,6 +247,9 @@ s3write_using(out.search.pcodes.df # What R object we are saving
 #################################################################
 ################### Function to return coordinates ##############
 #################################################################
+
+#We only used this for the 20 or so providers that weren't included in the NHS lookups
+#and therefore didn't already have a postcode
 
 ################### Write function that calls the Google Maps API
 
@@ -428,6 +428,7 @@ ukgrid = "+init=epsg:27700"
 latlong="+init=epsg:4326"
 
 #Import MSOA shapefile
+#Source: https://www.data.gov.uk/dataset/f06cd2d7-92df-4dbb-a82d-c4b86412dec4/middle-layer-super-output-areas-december-2011-generalised-clipped-boundaries-in-england-and-wales
 
 setwd(paste0(R_workbench,"/Shapefiles/MSOA"))
 MSOA_shapefile <- readOGR(dsn=".", layer="Middle_Layer_Super_Output_Areas_December_2011_Generalised_Clipped_Boundaries_in_England_and_Wales") 

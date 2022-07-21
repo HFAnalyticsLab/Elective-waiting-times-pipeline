@@ -2,17 +2,6 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Dynamic or static approach to lookups?
-
-#EXTERNAL RESOURCES TO GET POSTCODES
-
-#https://geoportal.statistics.gov.uk/search?collection=Dataset&sort=name&tags=all(LUP_LSOA_CCG_LAD)
-#https://healthgps.co.uk/
-#has org codes and addresses
-#or use https://www.linkedin.com/pulse/using-data-from-google-r-studio-caleb-aguiar
-#Google API
-#or OMS
-
 ##############################################
 ################### SETUP ####################
 ##############################################

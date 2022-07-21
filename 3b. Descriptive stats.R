@@ -144,10 +144,6 @@ ggsave(plot=scatter_plot_1, paste0(R_workbench,"/Charts/","scatter_plot_1.png"),
 
 ################## Wait time analysis overall
 
-admitted.by.spec.is %>%
-  filter(., specialty %in% c("Ophthalmology"),
-         type %in% c("completeadmitted"))
-
 flourish_wait_time_series <- admitted.by.spec.is %>%
   select(.,date_clean,specialty,type,independent,total.patients,rate.18wks.or.less,weeks.50) %>%
   mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>%
@@ -164,44 +160,62 @@ fwrite(flourish_wait_time_series,paste0(R_workbench,"/Charts/flourish_wait_time_
 
 ################## Summary one for Excel dashboard statistics
 
-summary_one_wide <- admitted.by.spec.is %>%
-  filter(.,independent!="All") %>%
-  mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>%
-  left_join(.,mini_months_count,by="COVID_timing") %>% 
-  group_by(ccg_name,COVID_timing,specialty,type,independent) %>% #Add totals by periods, IS, specialty and pathway
-  summarise(n_months=first(n_months),
-            total.patients=sum(total.patients,na.rm=TRUE)) %>% 
+mini_excel <- admitted.by.spec.is %>%
+  filter(.,independent=="All",ccg_name=="ENGLAND",specialty!="Total",type!="incomplete",COVID_timing!="COVID") %>%
+  group_by(COVID_timing,specialty,type) %>%
+  summarise(total.patients=sum(total.patients,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  left_join(.,mini_months_count,by="COVID_timing") %>%
+  mutate(.,patients_per_month=total.patients/n_months)
+
+mini_excel_two <- admitted.by.spec.is %>%
+  filter(.,ccg_name=="ENGLAND",specialty!="Total",type!="incomplete",COVID_timing!="COVID") %>%
+  group_by(COVID_timing,independent,specialty,type) %>%
+  summarise(total.patients=sum(total.patients,na.rm=TRUE)) %>% 
   ungroup() %>%
-  group_by(ccg_name,COVID_timing,specialty,type) %>%
-  mutate(total.is.nhs=sum(total.patients,na.rm=TRUE)) %>% #Add aggregated total NHS/IS so we can compute share
-  ungroup() %>%
-  mutate(.,share=total.patients/total.is.nhs*100,
-         patients_per_month=total.patients/n_months) %>% #Compute patient per month so we can compare periods
-  select(.,-c("total.is.nhs","total.patients","n_months")) %>% 
-  pivot_wider(
-    names_from = independent,
-    names_sep = ".",
-    values_from = c(patients_per_month,share)
-  ) %>%
-  pivot_wider(
-    names_from = COVID_timing,
-    names_sep = ".",
-    values_from = c('share.IS','share.NHS','patients_per_month.IS','patients_per_month.NHS')
-  ) %>%
-  mutate(.,
-         stat_specialty_growth_prepost=((`patients_per_month.NHS.Post-COVID`+`patients_per_month.IS.Post-COVID`)/
-           (`patients_per_month.NHS.Pre-COVID`+`patients_per_month.IS.Pre-COVID`)-1)*100,
-         stat_is_growth_prepost=(`patients_per_month.IS.Post-COVID`-`patients_per_month.IS.Pre-COVID`)/
-           `patients_per_month.IS.Pre-COVID`*100,
-         stat_nhs_growth_prepost=(`patients_per_month.NHS.Post-COVID`-`patients_per_month.NHS.Pre-COVID`)/
-           `patients_per_month.NHS.Pre-COVID`*100,
-         stat_is_growth_vs_all_prepost=(`patients_per_month.IS.Post-COVID`-`patients_per_month.IS.Pre-COVID`)/
-           (`patients_per_month.IS.Pre-COVID`+`patients_per_month.NHS.Pre-COVID`)*100,
-         stat_nhs_growth_vs_all_prepost=(`patients_per_month.NHS.Post-COVID`-`patients_per_month.NHS.Pre-COVID`)/
-           (`patients_per_month.IS.Pre-COVID`+`patients_per_month.NHS.Pre-COVID`)*100,
-         stat_delta_share_IS=`share.IS.Post-COVID`-`share.IS.Pre-COVID`) %>%
-  select(.,specialty,type,starts_with("stat")) %>%
-  arrange(.,type,desc(stat_delta_share_IS))
+  pivot_wider(names_from = independent,
+              names_sep = ".",
+              values_from = c(total.patients)) %>%
+  mutate(.,pct_IS=IS/All*100)
+
+# summary_one_wide <- admitted.by.spec.is %>%
+#   filter(.,independent!="All") %>%
+#   mutate(.,independent=ifelse(independent=="Non-IS","NHS",independent)) %>%
+#   left_join(.,mini_months_count,by="COVID_timing") %>% 
+#   group_by(ccg_name,COVID_timing,specialty,type,independent) %>% #Add totals by periods, IS, specialty and pathway
+#   summarise(n_months=first(n_months),
+#             total.patients=sum(total.patients,na.rm=TRUE)) %>% 
+#   ungroup() %>%
+#   group_by(ccg_name,COVID_timing,specialty,type) %>%
+#   mutate(total.is.nhs=sum(total.patients,na.rm=TRUE)) %>% #Add aggregated total NHS/IS so we can compute share
+#   ungroup() %>%
+#   mutate(.,share=total.patients/total.is.nhs*100,
+#          patients_per_month=total.patients/n_months) %>% #Compute patient per month so we can compare periods
+#   select(.,-c("total.is.nhs","total.patients","n_months")) %>% 
+#   pivot_wider(
+#     names_from = independent,
+#     names_sep = ".",
+#     values_from = c(patients_per_month,share)
+#   ) %>%
+#   pivot_wider(
+#     names_from = COVID_timing,
+#     names_sep = ".",
+#     values_from = c('share.IS','share.NHS','patients_per_month.IS','patients_per_month.NHS')
+#   ) %>%
+#   mutate(.,
+#          stat_specialty_growth_prepost=((`patients_per_month.NHS.Post-COVID`+`patients_per_month.IS.Post-COVID`)/
+#            (`patients_per_month.NHS.Pre-COVID`+`patients_per_month.IS.Pre-COVID`)-1)*100,
+#          stat_is_growth_prepost=(`patients_per_month.IS.Post-COVID`-`patients_per_month.IS.Pre-COVID`)/
+#            `patients_per_month.IS.Pre-COVID`*100,
+#          stat_nhs_growth_prepost=(`patients_per_month.NHS.Post-COVID`-`patients_per_month.NHS.Pre-COVID`)/
+#            `patients_per_month.NHS.Pre-COVID`*100,
+#          stat_is_growth_vs_all_prepost=(`patients_per_month.IS.Post-COVID`-`patients_per_month.IS.Pre-COVID`)/
+#            (`patients_per_month.IS.Pre-COVID`+`patients_per_month.NHS.Pre-COVID`)*100,
+#          stat_nhs_growth_vs_all_prepost=(`patients_per_month.NHS.Post-COVID`-`patients_per_month.NHS.Pre-COVID`)/
+#            (`patients_per_month.IS.Pre-COVID`+`patients_per_month.NHS.Pre-COVID`)*100,
+#          stat_delta_share_IS=`share.IS.Post-COVID`-`share.IS.Pre-COVID`) %>%
+#   select(.,specialty,type,starts_with("stat")) %>%
+#   arrange(.,type,desc(stat_delta_share_IS))
 
 #stat_specialty_growth_prepost 'how much has the specialty grown pre/post COVID'
 #stat_is_growth_prepost 'percentage growth of volume in IS sector pre/post COVID'

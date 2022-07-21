@@ -69,7 +69,8 @@ provider_names <- s3read_using(fread
 provider_names <- provider_names %>%
   group_by(Provider.Org.Code) %>%
   summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
-  ungroup()
+  ungroup() %>%
+  mutate(.,Provider.Org.Name=str_to_title(Provider.Org.Name))
 
 #Provider region
 provider_to_IMD_region <- s3read_using(fread
@@ -121,16 +122,14 @@ number_specialties_by_provider <- RTT_allmonths %>%
             total_vol_2122=sum(vol_2122,na.rm=TRUE)) %>%
   ungroup() %>%
   mutate(.,spec_mix_map=case_when(number_specialties<=1 ~ specialties,
-                                number_specialties>1 ~ "Multi-specialty")) %>%
-  mutate(.,spec_mix_map2=ifelse(spec_mix_map=="Multi-specialty"&has_opht==1,"Multi-specialty (incl. opht.)",spec_mix_map)) %>% 
-  mutate(.,spec_mix_map2=ifelse(spec_mix_map2=="Multi-specialty","Multi-specialty (no opht.)",spec_mix_map2))
+                                number_specialties>1 ~ "Multi-specialty"))
 
 #Merge names and volumes in
 RTT_provider_locations <- RTT_provider_locations %>%
   left_join(.,provider_names,by="Provider.Org.Code") %>% #Add names
   left_join(.,select(provider_to_IMD_region,Provider.Org.Code,region),by="Provider.Org.Code") %>% #Add region
   left_join(.,select(number_specialties_by_provider,Provider.Org.Code,IS_status,
-                     number_specialties,spec_mix_map,spec_mix_map2,has_opht,total_vol_2122),by="Provider.Org.Code")
+                     number_specialties,spec_mix_map,has_opht,total_vol_2122),by="Provider.Org.Code")
 
 #Turn into a shapefile
 RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$long,
@@ -151,7 +150,7 @@ RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&tot
 provider_map_flourish <- RTT_providers_shapefile_IS@data %>%
   select(.,Provider.Org.Code,Provider.Postcode,lat,long,
          Provider.Org.Name,region,IS_status,number_specialties,has_opht,
-         spec_mix_map,spec_mix_map2,total_vol_2122) %>%
+         spec_mix_map,total_vol_2122) %>%
   mutate(log_volume=log(total_vol_2122),
          sqrt_volume=(total_vol_2122)^0.5,
          custom_volume=(total_vol_2122^0.35)/17,
@@ -166,7 +165,25 @@ s3write_using(provider_map_flourish # What R object we are saving
 ################### Timeline of IS providers ################
 #############################################################
 
-provider_counts <- RTT_allmonths %>%
+provider_counts_12m <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
+  mutate(.,year_clean=paste0("20",str_sub(monthyr, start= -2)),
+         month_clean=substr(monthyr, 1, 3)) %>%
+  mutate(.,date_clean=lubridate::ymd(paste(year_clean,month_clean,"01",sep="-"))) %>%
+  filter(.,Treatment.Function.Name %in% c("Total","Ophthalmology","Gastroenterology"),
+         RTT.Part.Description %in% c("Completed Pathways For Non-Admitted Patients",
+                                     "Completed Pathways For Admitted Patients")) %>%
+  mutate(.,independent=ifelse(IS_provider==1,"IS","NHS")) %>%
+  group_by(Treatment.Function.Name,year_clean,independent) %>%
+  summarise(nr_providers=n_distinct(Provider.Org.Code),
+            total_patients=sum(Total.All, na.rm=TRUE),
+            nr_months=n_distinct(month_clean)) %>% 
+  ungroup() %>%
+  mutate(.,patients_per_month=total_patients/nr_months) %>%
+  pivot_longer(!c("Treatment.Function.Name","year_clean","independent","nr_months"),
+               names_to = "Variable", values_to = "Count")
+
+provider_counts_3m <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
   mutate(.,year_clean=paste0("20",str_sub(monthyr, start= -2)),
          month_clean=substr(monthyr, 1, 3)) %>%
@@ -185,7 +202,7 @@ provider_counts <- RTT_allmonths %>%
   pivot_longer(!c("Treatment.Function.Name","year_clean","independent","nr_months"),
                names_to = "Variable", values_to = "Count")
 
-provider_counts_chart_bis <- provider_counts %>%
+provider_counts_chart_bis <- provider_counts_3m %>%
   filter(.,Variable %in% c("nr_providers","patients_per_month"),
          independent=="IS",Treatment.Function.Name=="Ophthalmology") %>%
   mutate(Count_alt=ifelse(year_clean=="2022"&Variable=="nr_providers",NA,Count)) %>%
@@ -214,8 +231,6 @@ provider_counts_chart_bis <- provider_counts %>%
         axis.title.y = element_text(size = 10))
 
 provider_counts_chart_bis
-
-26763/12949
 
 ggsave(plot=provider_counts_chart_bis, paste0(R_workbench,"/Charts/","provider_counts_chart_ophth.png"), width = 20, height = 10, units = "cm")
 
