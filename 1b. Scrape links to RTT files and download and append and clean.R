@@ -6,19 +6,6 @@
 #Use s3sync() to sync into a bucket when ready
 #delete file 1a and file 2 from AWS branch
 
-#Other useful AWS functions
-
-#dummy <- data.frame(var1=as.character(1:100))
-# s3write_using(dummy # What R object we are saving
-#               , FUN = write.csv # Which R function we are using to save
-#               , object = 'RTT waiting times data/dummy.csv' # Name of the file to save to (include file type)
-#               , bucket = "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp") # Bucket name defined above
-# 
-
-#Create sub-folder in S3
-# put_folder(paste0(RTT_subfolder,"/",as.character(links.out.df$month[k])),
-#            bucket = IHT_bucket)
-
 ##############################################
 ################### SETUP ####################
 ##############################################
@@ -40,12 +27,11 @@ library(readxl)
 library(aws.s3)
 
 rm(list = ls()) #Clear the working environment
+source('setup.R') #get project locations in s3 and working directory
 
-#Directories in S3
-
-IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
-RTT_subfolder <- "RTT waiting times data"
-R_workbench <- path.expand("~")
+# IHT_bucket: s3 project bucket
+# RTT_subfolder: folder to place data
+# R_workbench: R server working directory
 
 #Create folder in local workbench for temporary files
 
