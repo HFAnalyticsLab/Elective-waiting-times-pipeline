@@ -59,7 +59,7 @@ provider_to_IMD_region <- s3read_using(fread
 #############################################################
 
 RTT_allmonths <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
+                              , object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv") # File to open
                               , bucket = IHT_bucket) # Bucket name defined above
 
 ##########################################################
