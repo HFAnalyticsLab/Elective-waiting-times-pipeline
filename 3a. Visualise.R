@@ -160,7 +160,7 @@ for (i in chart_pathway){
   for (j in all_specialties){
     
     plot_RTT_comp(specialty = j, type = i)
-    ggsave(paste0('Charts/Chart_', i, '_', j, '.png'), plot = last_plot())
+    ggsave(paste0('Charts/Update/Chart_', i, '_', j, '.png'), plot = last_plot())
     
     print(paste0('Saved ', n, ' of ', length(chart_pathway) * length(all_specialties)))
     
@@ -213,6 +213,7 @@ RTT_comp_data <- function(ccg_code = 'ENGLAND',
 
 n <- 1
 data_list <- list()
+data_pathway <- c('completeadmitted', 'completenonadmitted', 'newRTT')
 ## save processed data
 for (i in chart_pathway){
   
