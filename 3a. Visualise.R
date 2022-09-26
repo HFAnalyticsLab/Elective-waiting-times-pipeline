@@ -215,13 +215,13 @@ n <- 1
 data_list <- list()
 data_pathway <- c('completeadmitted', 'completenonadmitted', 'newRTT')
 ## save processed data
-for (i in chart_pathway){
+for (i in data_pathway){
   
   for (j in all_specialties){
     
     data_list[[n]] <- RTT_comp_data(specialty = j, type = i)
     
-    print(paste0('Processed ', n, ' of ', length(chart_pathway) * length(all_specialties)))
+    print(paste0('Processed ', n, ' of ', length(data_pathway) * length(all_specialties)))
     
     n <- n + 1
     
