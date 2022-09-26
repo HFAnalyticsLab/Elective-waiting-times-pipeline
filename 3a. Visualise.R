@@ -252,7 +252,7 @@ n <- 1
 ## save new RTT charts
 for (j in all_specialties){
     
-    plot_RTT_comp(specialty = j)
+    plot_newRTT(specialty = j)
     ggsave(paste0('Charts/Update/Chart_newRTT_', j, '.png'), plot = last_plot())
     
     print(paste0('Saved ', n, ' of ', length(all_specialties)))
