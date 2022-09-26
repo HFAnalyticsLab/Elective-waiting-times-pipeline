@@ -96,6 +96,7 @@ mini_months_COVID <- RTT_allmonths %>%
 #Clean up treatment names
 
 RTT_allmonths <- RTT_allmonths %>%
+  filter(.,Commissioner.Org.Code!="NONC") %>% 
   mutate(.,Treatment.Function.Name=str_replace_all(Treatment.Function.Name," Service","")) %>%
   mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Ear, Nose & Throat (ENT)","Ear Nose and Throat",Treatment.Function.Name)) %>%
   mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Geriatric Medicine","Elderly Medicine",Treatment.Function.Name)) %>% 
@@ -486,11 +487,43 @@ completed_imd_table <- RTT_allmonths %>%
   left_join(.,imd_pop_2020,by="imd_quintile") %>%
   mutate(.,pathways_per_person=Total.All/pop20*100)
 
+completed_imd_table_alt <- RTT_allmonths %>%
+  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
+  filter(Treatment.Function.Name=="Total",
+         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
+         (Period %in% fy_202122)) %>% 
+  #mutate(year_clean=word(Period,3,sep="-")) %>%
+  mutate(year_clean="2020/21",
+         IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
+  group_by(year_clean,IMD19_quintile,IS_provider) %>%
+  summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  group_by(year_clean,IS_provider) %>%
+  mutate(Total.All.Sectors=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(.,pct_quintile=Total.All/Total.All.Sectors) %>%
+  mutate(imd_quintile=ifelse(IMD19_quintile=="1","1 (most deprived)",IMD19_quintile)) %>%
+  mutate(imd_quintile=ifelse(IMD19_quintile=="5","5 (least deprived)",imd_quintile)) %>%
+  arrange(.,IS_provider,IMD19_quintile)
+
+imd_alt_flourish <- completed_imd_table_alt %>%
+  select(.,IS_provider,imd_quintile,pct_quintile) %>%
+  pivot_wider(names_from = imd_quintile,
+              names_sep = ".",
+              values_from = c(pct_quintile))
+
 #Save data
 s3write_using(completed_imd_table # What R object we are saving
               , FUN = fwrite # Which R function we are using to save
               , object = paste0(RTT_subfolder,"/completed_imd_table.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
+
+#Save data
+s3write_using(completed_imd_table_alt # What R object we are saving
+              , FUN = fwrite # Which R function we are using to save
+              , object = paste0(RTT_subfolder,"/completed_imd_table.csv") # Name of the file to save to (include file type)
+              , bucket = IHT_bucket) # Bucket name defined above
+
 
 imd_chart <-  completed_imd_table %>%
   mutate(.,IMD19_quintile=factor(IMD19_quintile),
