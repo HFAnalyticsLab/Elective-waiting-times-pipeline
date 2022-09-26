@@ -62,6 +62,7 @@ The list above is non exhaustive, but each of the individual .R codes in this re
 ## Authors
 
 * Sebastien Peytrignet - [Twitter](https://twitter.com/sebastienpeytr2) - [GitHub](sg-peytrignet)
+* Jay Hughes
 * Karen Hodgson
 
 ## License

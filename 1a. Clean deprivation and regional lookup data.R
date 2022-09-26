@@ -22,10 +22,11 @@ library(aws.s3)
 rm(list = ls())
 
 #Directories in S3
+source('setup.R') #get project locations in s3 and working directory
 
-IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
-RTT_subfolder <- "RTT waiting times data"
-R_workbench <- path.expand("~")
+# IHT_bucket: s3 project bucket
+# RTT_subfolder: folder to place data
+# R_workbench: R server working directory
 
 ##############################################################
 ################### Mapping CCGs to deprivation ##############

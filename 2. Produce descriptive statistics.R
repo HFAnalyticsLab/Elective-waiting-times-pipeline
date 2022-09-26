@@ -27,10 +27,11 @@ library(aws.s3)
 rm(list = ls())
 
 #Directories in S3
+source('setup.R') #get project locations in s3 and working directory
 
-IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
-RTT_subfolder <- "RTT waiting times data"
-R_workbench <- path.expand("~")
+# IHT_bucket: s3 project bucket
+# RTT_subfolder: folder to place data
+# R_workbench: R server working directory
 
 #Useful functions
 only_letters <- function(x) { gsub("^([[:alpha:]]*).*$","\\1",x) }
@@ -58,7 +59,7 @@ provider_to_IMD_region <- s3read_using(fread
 #############################################################
 
 RTT_allmonths <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
+                              , object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv") # File to open
                               , bucket = IHT_bucket) # Bucket name defined above
 
 ##########################################################

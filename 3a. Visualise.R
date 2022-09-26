@@ -5,54 +5,6 @@ library(ggpubr)
 
 source('2. Produce descriptive statistics.R')
 
-## Basic time series analysis and visualisation
-plot_RTT <- function(provider = 'ENGLAND',
-                     specialty,
-                     quantiles = c(0.95, 0.50),
-                     type,
-                     chart_title = ''){
-
-  res <- list()
-  j <- 1
-  for (i in all_months){
-    
-    res[[j]] <- dashboard_stats_provider(monthyear=i,
-                             provider=provider,
-                             specialty=specialty,
-                             quantiles=quantiles,
-                             type=type)
-    j <- j + 1
-    
-  }
-  
-  result <- rbindlist(res)
-  
-  result$date <- as.Date(paste0('01-',
-                               substr(result$monthyear, 1, 3),
-                               '-', 
-                               substr(result$monthyear, 4, 5)),
-                         format = '%d-%b-%y')
-                               
-  p <- ggplot(result, aes(x = date, y = total.patients)) +
-    geom_line() +
-    ggtitle(chart_title)
- # abline(v = as.Date('2020-03-26'))
-  
-  return(p)
-}
-
-plot_RTT(specialty = 'Total', type = 'incomplete',
-         chart_title = 'Total patients on incomplete pathways')
-
-plot_RTT(specialty = 'Total', type = 'completeadmitted',
-         chart_title = 'Total patients on completed pathways that have been admitted')
-
-plot_RTT(specialty = 'Total', type = 'completenonadmitted',
-         chart_title = 'Total patients on completed pathways that have been admitted')
-
-
-plot_RTT(specialty = 'Rheumatology', type = 'completeadmitted')
-
 ## lockdown period for charts:
 lockdown <- annotate('rect',
                      xmin = as.Date(c('2020-03-26', '2020-11-05', '2021-01-06')),
@@ -197,41 +149,6 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
   return(plot)
 }
 
-plot_RTT_comp(specialty = 'Total', type = 'incomplete')
-plot_RTT_comp(specialty = 'Total', type = 'completeadmitted')
-plot_RTT_comp(specialty = 'Total', type = 'completenonadmitted')
-plot_RTT_comp(specialty = 'Total', type = 'incompleteDTA')
-plot_RTT_comp(specialty = 'Total', type = 'newRTT')
-
-plot_RTT_comp(specialty = 'Cardiology', type = 'incomplete')
-plot_RTT_comp(specialty = 'Gastroenterology', type = 'completeadmitted')
-plot_RTT_comp(specialty = 'Gastroenterology', type = 'completenonadmitted')
-
-plot_RTT_comp(specialty = 'Cardiology', type = 'completenonadmitted')
-plot_RTT_comp(specialty = 'Cardiology', type = 'incompleteDTA')
-plot_RTT_comp(specialty = 'Cardiology', type = 'newRTT')
-
-plot_RTT_comp(specialty = 'Ophthalmology', type = 'completeadmitted')
-
-
-### ORIGINAL METHOD
-#ratio2 <- max(chart_2_data$vol) / max(chart_2_data$prop)
-
-#ylim.vol <- c(0, max(chart_2_data$vol))
-#ylim.pro <- c(0, max(chart_2_data$prop))
-
-#b <- diff(ylim.vol)/diff(ylim.pro)
-#a <- 0
-
-#  q <- ggplot(chart_2_data, aes(date, vol)) +
-#    geom_col(fill = 'light grey') +
-#    geom_line(aes(y = a + prop*b), color = 'red', size = 2) +
-#    scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
-#    theme_minimal() +
-#    ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
-#    theme(plot.title = element_text(size = 10),
-#          axis.title = element_text(size = 8))
-  
 
 #############################
 chart_pathway <- c('completeadmitted', 'completenonadmitted')
@@ -243,7 +160,7 @@ for (i in chart_pathway){
   for (j in all_specialties){
     
     plot_RTT_comp(specialty = j, type = i)
-    ggsave(paste0('Charts/Chart_', i, '_', j, '.png'), plot = last_plot())
+    ggsave(paste0('Charts/Update/Chart_', i, '_', j, '.png'), plot = last_plot())
     
     print(paste0('Saved ', n, ' of ', length(chart_pathway) * length(all_specialties)))
     
@@ -296,6 +213,7 @@ RTT_comp_data <- function(ccg_code = 'ENGLAND',
 
 n <- 1
 data_list <- list()
+data_pathway <- c('completeadmitted', 'completenonadmitted', 'newRTT')
 ## save processed data
 for (i in chart_pathway){
   

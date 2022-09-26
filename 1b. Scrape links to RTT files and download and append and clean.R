@@ -6,19 +6,6 @@
 #Use s3sync() to sync into a bucket when ready
 #delete file 1a and file 2 from AWS branch
 
-#Other useful AWS functions
-
-#dummy <- data.frame(var1=as.character(1:100))
-# s3write_using(dummy # What R object we are saving
-#               , FUN = write.csv # Which R function we are using to save
-#               , object = 'RTT waiting times data/dummy.csv' # Name of the file to save to (include file type)
-#               , bucket = "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp") # Bucket name defined above
-# 
-
-#Create sub-folder in S3
-# put_folder(paste0(RTT_subfolder,"/",as.character(links.out.df$month[k])),
-#            bucket = IHT_bucket)
-
 ##############################################
 ################### SETUP ####################
 ##############################################
@@ -40,12 +27,11 @@ library(readxl)
 library(aws.s3)
 
 rm(list = ls()) #Clear the working environment
+source('setup.R') #get project locations in s3 and working directory
 
-#Directories in S3
-
-IHT_bucket <- "s3://thf-dap-tier0-projects-iht-067208b7-projectbucket-1mrmynh0q7ljp"
-RTT_subfolder <- "RTT waiting times data"
-R_workbench <- path.expand("~")
+# IHT_bucket: s3 project bucket
+# RTT_subfolder: folder to place data
+# R_workbench: R server working directory
 
 #Create folder in local workbench for temporary files
 
@@ -69,6 +55,13 @@ if (file.exists(paste0(temp_folder,"/temp files"))) {
 #####################################################
 ################### Web-scraping ####################
 #####################################################
+
+#2022-2023
+months2223 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
+years2223 <- c(rep(22,9),rep(23,3))
+series2223 <- rep(2223,length(months2223))
+input2223 <- cbind.data.frame(month=paste0(months2223,years2223),series=series2223)
+rm(months2223,years2223,series2223)
 
 #2020-2021
 months2122 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
@@ -100,16 +93,17 @@ rm(months1819,years1819,series1819)
 
 #All together
 
-inputs <- plyr::rbind.fill(input2122,input2021,input1920,input1819)
-rm(input2122,input2021,input1920,input1819)
+inputs <- plyr::rbind.fill(input2223,input2122,input2021,input1920,input1819)
+rm(input2223,input2122,input2021,input1920,input1819)
 
 #Function that reports links to 3 files for each month
 
 return_links_rtt <- function(month,series){
   
   #Find landing page for the appropriate financial year
-  
-  if (series=="2122"){
+  if (series=="2223"){
+    read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2022-23/")
+  } else if (series=="2122"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2021-22/")
   } else if (series=="2021"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2020-21/")
@@ -169,6 +163,9 @@ rm(inputs,links.out)
 
 #links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 3 months
 
+# April 2022 does not follow the same pattern for links so add manually
+missing <- 'https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2022/06/NonAdmitted-Provider-Apr-22-XLS-8573K-57873.xls'
+links.out.df$providers.link.nonadm$Apr22 <- missing
 ###########################################################
 ################### Download all files ####################
 ###########################################################
@@ -331,7 +328,7 @@ for (j in 1:nrow(links.out.df)){
 
 #Save
 setwd(paste0(R_workbench,"/",temp_folder,"/"))
-fwrite(storage.rtt, file = "RTT_allmonths.csv", sep = ",")
+fwrite(storage.rtt, file = "RTT_allmonths_new.csv", sep = ",")
 
 #Clean up files
 rm(links.out.df,IS_providers_allmonths,RTT_month,storage.rtt)
@@ -349,12 +346,12 @@ unlink("temp files",recursive=TRUE)
 
 setwd(paste0(R_workbench,"/",temp_folder,"/"))
 
-put_object(file = 'RTT_allmonths.csv',
-           object = paste0(RTT_subfolder,"/","RTT_allmonths.csv"),
+put_object(file = 'RTT_allmonths_new.csv',
+           object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv"),
            bucket = IHT_bucket, show_progress = TRUE,
-           mulitpart=TRUE)
+           multipart=TRUE)
 
 put_object(file = 'IS_providers_allmonths.csv',
            object = paste0(RTT_subfolder,"/","IS_providers_allmonths.csv"),
            bucket = IHT_bucket, show_progress = TRUE,
-           mulitpart=TRUE)
+           multipart=TRUE)
