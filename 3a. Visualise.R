@@ -170,6 +170,97 @@ for (i in chart_pathway){
   
 }
 
+## chart function to plot new clokc starts only
+plot_newRTT <- function(ccg_code = 'ENGLAND',
+                        quantiles = c(0.95, 0.50),
+                        specialty,
+                        chart_title = ''){
+  
+  res <- list()
+  
+  j <- 1
+  for (i in all_months){
+    
+    res[[j]] <- dashboard_stats_ccg(monthyear=i,
+                                    ccg_code=ccg_code,
+                                    specialty=specialty,
+                                    quantiles=quantiles,
+                                    type='newRTT',
+                                    independent=0)
+    res[[j+1]] <- dashboard_stats_ccg(monthyear=i,
+                                      ccg_code=ccg_code,
+                                      specialty=specialty,
+                                      quantiles=quantiles,
+                                      type='newRTT',
+                                      independent=1)
+    
+    j <- j + 2
+    
+  }
+  
+  result <- rbindlist(res)
+  
+  result$total_noNA <- ifelse(is.na(result$total.patients), 0, result$total.patients)
+  result$Provider <- ifelse(result$independent == 'IS', 'Independent', 'NHS')
+  
+  result$date <- as.Date(paste0('01-',
+                                substr(result$monthyear, 1, 3),
+                                '-', 
+                                substr(result$monthyear, 4, 5)),
+                         format = '%d-%b-%y')
+  
+  chart_1_data <- data.frame(date = unique(result$date),
+                             prop = result$total_noNA[result$independent == 'IS'] /
+                               (result$total_noNA[result$independent == 'Non-IS'] +
+                                  result$total_noNA[result$independent == 'IS']) * 100,
+                             vol = result$total_noNA[result$independent == 'Non-IS'] +
+                               result$total_noNA[result$independent == 'IS'])
+  
+  prop1 <- result$total_noNA[result$independent == 'IS'] /
+    (result$total_noNA[result$independent == 'IS'] +
+       result$total_noNA[result$independent == 'Non-IS'])
+  prop1 <- rep(prop1, each = 2)
+  
+  ratio1 <- max(chart_1_data$vol) / max(chart_1_data$prop)
+  
+  ylim.vol1 <- c(0, max(chart_1_data$vol))
+  ylim.pro1 <- c(0, max(chart_1_data$prop))
+  
+  b1 <- diff(ylim.vol1)/diff(ylim.pro1)
+  
+  if(ratio1 == Inf | is.na(ratio1)){
+    
+    p <- ggplot(data.frame())
+    
+  } else {
+    
+    p <-  ggplot(result, aes(date, total.patients, fill = Provider)) +
+      geom_col() +
+      geom_line(aes(y = prop1 * b1 * 100), color = 'black', size = 2) +
+      scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
+      theme_minimal() +
+      ggtitle(paste0('Monthly new clock starts with proportion by provider - ', specialty)) +
+      theme(plot.title = element_text(size = 10),
+            axis.title = element_text(size = 8)) +
+      lockdown
+  }
+  
+  return(p)
+}
+
+n <- 1
+## save new RTT charts
+for (j in all_specialties){
+    
+    plot_RTT_comp(specialty = j)
+    ggsave(paste0('Charts/Update/Chart_newRTT_', j, '.png'), plot = last_plot())
+    
+    print(paste0('Saved ', n, ' of ', length(all_specialties)))
+    
+    n <- n + 1
+    
+}
+  
 ## get data only to export to excel
 RTT_comp_data <- function(ccg_code = 'ENGLAND',
                           specialty,
