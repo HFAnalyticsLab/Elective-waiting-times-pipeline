@@ -375,11 +375,11 @@ dashboard_stats_ccg <- function(monthyear,ccg_code,specialty,quantiles,type,inde
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
   } else if (type=="incompleteDTA"){
-    datasubset <- filter(dataset,Commissioner.Org.Code==ccg_code&
+    datasubset <- filter(monthly_data,Commissioner.Org.Code==ccg_code&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways with DTA")
   } else if (type=="newRTT"){
-    datasubset <- filter(dataset,Commissioner.Org.Code==ccg_code&
+    datasubset <- filter(monthly_data,Commissioner.Org.Code==ccg_code&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="New RTT Periods - All Patients")
   }
