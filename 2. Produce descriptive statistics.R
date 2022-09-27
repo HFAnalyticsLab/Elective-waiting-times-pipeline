@@ -544,11 +544,11 @@ dashboard_stats_region <- function(monthyear,regionname,specialty,quantiles,type
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
   } else if (type=="incompleteDTA"){
-    datasubset <- filter(dataset,region==regionname&
+    datasubset <- filter(monthly_data,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways with DTA")
   } else if (type=="newRTT"){
-    datasubset <- filter(dataset,region==regionname&
+    datasubset <- filter(monthly_data,region==regionname&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="New RTT Periods - All Patients")
   }
@@ -711,11 +711,11 @@ dashboard_stats_imd_quintile <- function(monthyear,imd,specialty,quantiles,type,
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Completed Pathways For Non-Admitted Patients")
   } else if (type=="incompleteDTA"){
-    datasubset <- filter(dataset,IMD19_quintile==imd&
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="Incomplete Pathways with DTA")
   } else if (type=="newRTT"){
-    datasubset <- filter(dataset,IMD19_quintile==imd&
+    datasubset <- filter(monthly_data,IMD19_quintile==imd&
                            Treatment.Function.Name==specialty&
                            RTT.Part.Description=="New RTT Periods - All Patients")
   }
