@@ -16,7 +16,8 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                      specialty,
                      quantiles = c(0.95, 0.50),
                      type,
-                     chart_title = ''){
+                     chart_title = '',
+                     start_date = NA){
   
   res <- list()
 
@@ -51,6 +52,12 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
                                 '-', 
                                 substr(result$monthyear, 4, 5)),
                          format = '%d-%b-%y')
+  
+  if(!is.na(start_date)){
+    
+    result <- result[date >= as.Date(start_date), ]
+    
+  }
   
   chart_1_data <- data.frame(date = unique(result$date),
                              prop = result$total_noNA[result$independent == 'IS'] /
@@ -92,8 +99,10 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme_minimal() +
           ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
           theme(plot.title = element_text(size = 10),
-                axis.title = element_text(size = 8)) +
-          lockdown
+                axis.title = element_text(size = 8))
+    
+    if(as.Date(start_date) < lockdown$data$xmin[1]){
+          p <- p + lockdown}
 }
 
   prop2 <- result$num18.or.less_noNA[result$independent == 'IS'] /
@@ -121,8 +130,10 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme_minimal() +
           ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
           theme(plot.title = element_text(size = 10),
-                axis.title = element_text(size = 8)) +
-          lockdown
+                axis.title = element_text(size = 8))
+    
+      if(as.Date(start_date) < lockdown$data$xmin[1]){
+        q <- q + lockdown}
         
   }
   
@@ -131,16 +142,21 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     ggtitle(chart_title) +
     ylab('Median weeks') +
     theme_minimal() +
-    theme(axis.title = element_text(size = 8)) +
-    lockdown
+    theme(axis.title = element_text(size = 8))
+  
+  if(as.Date(start_date) < lockdown$data$xmin[1]){
+    r <- r + lockdown}
   
   s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = Provider)) +
     geom_line(size=1) +
     ggtitle(chart_title) +
     ylab('Proportion > 52 weeks') +
     theme_minimal() +
-    theme(axis.title = element_text(size = 8)) +
-    lockdown
+    theme(axis.title = element_text(size = 8))
+  
+  if(as.Date(start_date) < lockdown$data$xmin[1]){
+    s <- s + lockdown}
+    
   
   plot <- ggarrange(p, q, r, s, common.legend = TRUE, legend = 'bottom') %>%
   annotate_figure(., top = text_grob(paste0('All patients ', specialty, ', pathway: ', type),
