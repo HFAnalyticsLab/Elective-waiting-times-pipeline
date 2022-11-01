@@ -4,6 +4,7 @@
 
 library(ggplot2)
 library(data.table)
+library(ggpubr)
 
 source('2. Produce descriptive statistics.R')
 
@@ -93,19 +94,38 @@ plot_ratio <- function(ccg_code = 'ENGLAND',
                                             specialty,
                                             independent)]
   
-  result <- merge(result_new, fin, by = c('monthyear', 'ccg', 'ccg_name', 'specialty', 'independent'))                                       
-  result$date <- as.Date(paste0('01-',
-                                substr(result$monthyear, 1, 3),
-                                '-', 
-                                substr(result$monthyear, 4, 5)),
-                         format = '%d-%b-%y')
+  result_adm <- rbindlist(adm) %>% .[, .(monthyear,
+                                         ccg,
+                                         ccg_name,
+                                         specialty,
+                                         independent,
+                                         total.patients)]
   
-  result[, prop := total.patients / V1]
-  result[, Provider := fifelse(independent == 'IS', 'IS', 'NHS')]
+  result <- merge(result_new, fin, by = c('monthyear', 'ccg', 'ccg_name', 'specialty', 'independent'))
+  result <- merge(result, result_adm, by = c('monthyear', 'ccg', 'ccg_name', 'specialty', 'independent'))
   
-    p <-  ggplot(result, aes(date, prop, color = Provider)) +
-      geom_line(size = 2) +
+  
+  comb <- result[, lapply(.SD, sum), by =  .(monthyear,
+                                     ccg,
+                                     ccg_name,
+                                     specialty),
+         .SDcols = c('total.patients.x', 'V1', 'total.patients.y')]
+  
+  comb$independent <- 'Total'
+  comb$type <- 'newRTT'
+  result <- rbind(result, comb)
+    result$date <- as.Date(paste0('01-',
+                                  substr(result$monthyear, 1, 3),
+                                  '-', 
+                                  substr(result$monthyear, 4, 5)),
+                           format = '%d-%b-%y')
+  result[, prop_all := total.patients.x / V1]
+  result[, Provider := fifelse(independent == 'IS', 'IS', fifelse(independent == 'Non-IS', 'NHS', 'Total'))]
+  
+    p <-  ggplot(result, aes(date, prop_all, color = Provider)) +
+      geom_line(size = 1) +
       theme_minimal() +
+      scale_y_continuous(limits = c(0, max(result$prop_all))) +
       ggtitle(paste0('Ratio of new RTTs to completed pathways - ', specialty)) +
       ylab('Pathways started for each one finished') +
       geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
@@ -113,7 +133,22 @@ plot_ratio <- function(ccg_code = 'ENGLAND',
             axis.title = element_text(size = 8)) +
       lockdown
   
-  return(p)
+    result[, prop_adm := total.patients.y / V1]
+    
+    q <-  ggplot(result, aes(date, prop_adm, color = Provider)) +
+      geom_line(size = 1) +
+      theme_minimal() +
+      scale_y_continuous(limits = c(0, max(result$prop_all))) +
+      ggtitle(paste0('Ratio of new RTTs to admitted pathways - ', specialty)) +
+      ylab('Pathways started for each one admitted') +
+      geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
+      theme(plot.title = element_text(size = 10),
+            axis.title = element_text(size = 8)) +
+      lockdown
+    
+    plot <- ggarrange(p, q, common.legend = TRUE, legend = 'bottom', align = 'hv')
+    
+    return(plot)
     
 }
 
