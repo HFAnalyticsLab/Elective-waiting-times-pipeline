@@ -125,7 +125,7 @@ plot_ratio <- function(ccg_code = 'ENGLAND',
     p <-  ggplot(result, aes(date, prop_all, color = Provider)) +
       geom_line(size = 1) +
       theme_minimal() +
-      scale_y_continuous(limits = c(0, max(result$prop_all))) +
+      scale_y_continuous(limits = c(0, max(result$prop_adm))) +
       ggtitle(paste0('Ratio of new RTTs to completed pathways - ', specialty)) +
       ylab('Pathways started for each one finished') +
       geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
@@ -133,12 +133,12 @@ plot_ratio <- function(ccg_code = 'ENGLAND',
             axis.title = element_text(size = 8)) +
       lockdown
   
-    result[, prop_adm := total.patients.y / V1]
+    result[, prop_adm := total.patients.x / total.patients.y]
     
     q <-  ggplot(result, aes(date, prop_adm, color = Provider)) +
       geom_line(size = 1) +
       theme_minimal() +
-      scale_y_continuous(limits = c(0, max(result$prop_all))) +
+      scale_y_continuous(limits = c(0, max(result$prop_adm))) +
       ggtitle(paste0('Ratio of new RTTs to admitted pathways - ', specialty)) +
       ylab('Pathways started for each one admitted') +
       geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
