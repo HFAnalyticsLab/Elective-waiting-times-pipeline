@@ -123,28 +123,34 @@ plot_ratio <- function(ccg_code = 'ENGLAND',
   result[, Provider := fifelse(independent == 'IS', 'IS', fifelse(independent == 'Non-IS', 'NHS', 'Total'))]
   
     p <-  ggplot(result, aes(date, prop_all, color = Provider)) +
-      geom_line(size = 1) +
+      geom_line(aes(size = Provider)) +
+      scale_size_manual(values =  c(IS = 1, NHS = 1, Total = 2)) +
       theme_minimal() +
-      scale_y_continuous(limits = c(0, max(result$prop_adm))) +
+ #     scale_y_continuous(limits = c(0, max(result$prop_adm))) +
       ggtitle(paste0('Ratio of new RTTs to completed pathways - ', specialty)) +
       ylab('Pathways started for each one finished') +
       geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
       theme(plot.title = element_text(size = 10),
             axis.title = element_text(size = 8)) +
-      lockdown
-  
+      lockdown +
+      scale_color_manual(values = c(IS = '#F8766D', NHS = '#619CFF', Total = 'black'))
+    
     result[, prop_adm := total.patients.x / total.patients.y]
+    #result[, prop_non := total.patients.x / (V1 - total.patients.y)]
     
     q <-  ggplot(result, aes(date, prop_adm, color = Provider)) +
-      geom_line(size = 1) +
+      geom_line(aes(size = Provider)) +
+      scale_size_manual(values =  c(IS = 1, NHS = 1, Total = 2)) +
       theme_minimal() +
-      scale_y_continuous(limits = c(0, max(result$prop_adm))) +
+  #    scale_y_continuous(limits = c(0, max(result$prop_adm))) +
       ggtitle(paste0('Ratio of new RTTs to admitted pathways - ', specialty)) +
       ylab('Pathways started for each one admitted') +
       geom_hline(yintercept = 1, color = 'grey', linetype = 'dashed') +
       theme(plot.title = element_text(size = 10),
             axis.title = element_text(size = 8)) +
-      lockdown
+      lockdown +
+      scale_color_manual(values = c(IS = '#F8766D', NHS = '#619CFF', Total = 'black'))
+    
     
     plot <- ggarrange(p, q, common.legend = TRUE, legend = 'bottom', align = 'hv')
     
