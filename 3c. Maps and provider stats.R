@@ -80,7 +80,7 @@ provider_to_IMD_region <- s3read_using(fread
 
 #Monthly data
 RTT_allmonths <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
+                              , object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv") # File to open
                               , bucket = IHT_bucket) # Bucket name defined above
 
 #Number of months in data depending on COVID timing
@@ -138,6 +138,180 @@ RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$l
                                                         RTT_provider_locations$lat),
                                                   data=RTT_provider_locations,
                                                   proj4string = CRS(latlong))
+
+#####################################################
+################### Flourish chart 1 ################
+#####################################################
+
+##### Timelines
+
+unique(RTT_allmonths$RTT.Part.Description)
+
+timelines_raw <- RTT_allmonths %>%
+  filter((Treatment.Function.Name %in% c("Total","Ophthalmology"))&
+           (RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
+                                        "Completed Pathways For Non-Admitted Patients"))) %>%
+  group_by(Period,Treatment.Function.Name,IS_provider) %>%
+  summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(IS_provider=ifelse(IS_provider=="1","IS","NHS")) %>% 
+  pivot_wider(
+    names_from = IS_provider,
+    names_sep = ".",
+    values_from = c(Total.All)
+  ) %>%
+  mutate(month=stringr::word(Period,2,sep="-") %>% tolower(),
+         year=stringr::word(Period,3,sep="-")) %>%
+  mutate(Date=lubridate::dmy(paste("01",month,year,sep="-"))) %>%
+  mutate(Share=IS/(IS+NHS)*100) %>%
+  arrange(desc(Treatment.Function.Name),Date) %>%
+  select(Date,Treatment.Function.Name,Share,NHS,IS)
+
+  #Total
+
+flourish1_a <- timelines_raw %>%
+  filter(Treatment.Function.Name=="Total") %>% 
+  mutate(Grid="Volume of treatments") %>%
+  select(Date,Grid,Share,IS,NHS) %>%
+  rename(`Independent sector share of total treatments`=Share,
+         `Independent sector`=IS) %>%
+  mutate(`Independent sector share of total treatments`=NA)
+
+flourish1_b <- timelines_raw %>%
+  filter(Treatment.Function.Name=="Total") %>% 
+  mutate(Grid="Share of treatments (%)") %>%
+  select(Date,Grid,Share,IS,NHS) %>%
+  rename(`Independent sector share of total treatments`=Share,
+         `Independent sector`=IS) %>%
+  mutate(`Independent sector`=NA,NHS=NA)
+
+flourish1 <- plyr::rbind.fill(flourish1_a,flourish1_b)
+rm(flourish1_a,flourish1_b)
+
+  #Ophthalmology
+
+flourish2_a <- timelines_raw %>%
+  filter(Treatment.Function.Name=="Ophthalmology") %>% 
+  mutate(Grid="Number of treatments") %>%
+  select(Date,Grid,Share,IS,NHS) %>%
+  rename(`Independent sector share of total treatments`=Share,
+         `Independent sector`=IS) %>%
+  mutate(`Independent sector share of total treatments`=NA)
+
+flourish2_b <- timelines_raw %>%
+  filter(Treatment.Function.Name=="Ophthalmology") %>% 
+  mutate(Grid="Share of treatments delivered by the independent sector (%)") %>%
+  select(Date,Grid,Share,IS,NHS) %>%
+  rename(`Independent sector share of total treatments`=Share,
+         `Independent sector`=IS) %>%
+  mutate(`Independent sector`=NA,NHS=NA)
+
+flourish2 <- plyr::rbind.fill(flourish2_a,flourish2_b)
+rm(flourish2_a,flourish2_b)
+
+fwrite(flourish1,
+       paste0(R_workbench,"/Charts/","timeline_all.csv"))
+
+fwrite(flourish2,
+       paste0(R_workbench,"/Charts/","timeline_ophth.csv"))
+
+##### Pre/post analysis
+
+prepost_raw <- RTT_allmonths %>%
+  mutate(Timing=case_when((toupper(Period) %in% pre_COVID) ~ "Pre",
+                                (toupper(Period) %in% during_COVID) ~ "During",
+                                (toupper(Period) %in% post_COVID) ~ "Post",
+                                TRUE ~ "NA")) %>% 
+  filter((Treatment.Function.Name %in% c("Trauma and Orthopaedic",
+                                         "Gastroenterology",
+                                         "Ophthalmology",
+                                         "General Surgery",
+                                         "Gynaecology",
+                                         "Dermatology",
+                                         "Urology",
+                                         "Neurosurgery",
+                                         "Oral Surgery",
+                                         "Ear Nose and Throat",
+                                         "Plastic Surgery",
+                                         "Elderly Medicine",
+                                         "Cardiology",
+                                         "Neurology",
+                                         "Cardiothoracic Surgery",
+                                         "Rheumatology"))&
+           RTT.Part.Description=="Completed Pathways For Admitted Patients"&
+           (Timing %in% c("Pre","Post"))) %>%
+  group_by(Timing,Treatment.Function.Name,IS_provider) %>%
+  summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
+  ungroup() %>%
+  mutate(IS_provider=ifelse(IS_provider=="1","IS","NHS")) %>%
+  pivot_wider(
+    names_from = IS_provider,
+    names_sep = ".",
+    values_from = c(Total.All)
+  ) %>%
+  left_join(.,mini_months_COVID,by=c("Timing"="COVID_timing")) %>%
+  mutate(TotalPM=(NHS+IS)/n_months,
+         Share=IS/(NHS+IS)*100) %>%
+  select(-c("NHS","IS","n_months")) %>% 
+  pivot_wider(
+    names_from = Timing,
+    names_sep = ".",
+    values_from = c("TotalPM","Share")
+  ) 
+
+prepost_a <- prepost_raw %>%
+  select(Treatment.Function.Name,TotalPM.Pre,TotalPM.Post) %>%
+  mutate(Grid="Number of treatments per month") %>%
+  rename(Specialty=Treatment.Function.Name,
+         `April 2018 to February 2020`=TotalPM.Pre,
+         `June 2021 to October 2022`=TotalPM.Post) %>%
+  mutate(Specialty=fct_relevel(Specialty, c("Trauma and Orthopaedic",
+                          "Gastroenterology",
+                          "Ophthalmology",
+                          "General Surgery",
+                          "Gynaecology",
+                          "Dermatology",
+                          "Urology",
+                          "Neurosurgery",
+                          "Oral Surgery",
+                          "Ear Nose and Throat",
+                          "Plastic Surgery",
+                          "Elderly Medicine",
+                          "Cardiology",
+                          "Neurology",
+                          "Cardiothoracic Surgery",
+                          "Rheumatology"))) %>%
+  arrange(Specialty)
+
+prepost_b <- prepost_raw %>%
+  select(Treatment.Function.Name,Share.Pre,Share.Post) %>%
+  mutate(Grid="Share of treatments delivered by the independent sector (%)") %>%
+  rename(Specialty=Treatment.Function.Name,
+         `April 2018 to February 2020`=Share.Pre,
+         `June 2021 to October 2022`=Share.Post) %>%
+  mutate(Specialty=fct_relevel(Specialty, c("Trauma and Orthopaedic",
+                                            "Gastroenterology",
+                                            "Ophthalmology",
+                                            "General Surgery",
+                                            "Gynaecology",
+                                            "Dermatology",
+                                            "Urology",
+                                            "Neurosurgery",
+                                            "Oral Surgery",
+                                            "Ear Nose and Throat",
+                                            "Plastic Surgery",
+                                            "Elderly Medicine",
+                                            "Cardiology",
+                                            "Neurology",
+                                            "Cardiothoracic Surgery",
+                                            "Rheumatology"))) %>%
+  arrange(Specialty)
+
+flourish3 <- plyr::rbind.fill(prepost_a,prepost_b)
+rm(prepost_a,prepost_b)
+
+fwrite(flourish3,
+       paste0(R_workbench,"/Charts/","prepost_all.csv"))
 
 #####################################################
 ################### Map of providers ################
