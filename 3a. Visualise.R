@@ -338,3 +338,7 @@ for (i in data_pathway){
 
 data_export <- rbindlist(data_list)
 write_csv(data_export, file = 'RTT_processed.csv')
+
+put_object(file = 'RTT_processed.csv',
+           object = paste0(RTT_subfolder, '/RTT_processed.csv'),
+           bucket = IHT_bucket)
