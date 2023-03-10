@@ -145,8 +145,6 @@ RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$l
 
 ##### Timelines
 
-unique(RTT_allmonths$RTT.Part.Description)
-
 timelines_raw <- RTT_allmonths %>%
   filter((Treatment.Function.Name %in% c("Total","Ophthalmology"))&
            (RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
@@ -163,9 +161,23 @@ timelines_raw <- RTT_allmonths %>%
   mutate(month=stringr::word(Period,2,sep="-") %>% tolower(),
          year=stringr::word(Period,3,sep="-")) %>%
   mutate(Date=lubridate::dmy(paste("01",month,year,sep="-"))) %>%
-  mutate(Share=IS/(IS+NHS)*100) %>%
+  mutate(Share=IS/(IS+NHS)*100,
+         Total=(IS+NHS)) %>%
   arrange(desc(Treatment.Function.Name),Date) %>%
-  select(Date,Treatment.Function.Name,Share,NHS,IS)
+  select(Period,Date,Treatment.Function.Name,Share,NHS,IS,Total)
+
+  #Pre-post COVID comparisons
+
+timelines_raw %>%
+  filter(Treatment.Function.Name=="Total") %>%
+  mutate(Period=toupper(Period)) %>% 
+  mutate(covid_period=case_when(Period %in% pre_COVID ~ "pre",
+                                Period %in% during_COVID ~ "during",
+                                Period %in% post_COVID ~ "post",
+                                TRUE ~ "NA")) %>%
+  group_by(covid_period,Treatment.Function.Name) %>%
+  summarise(Share=weighted.mean(Share,Total)) %>% 
+  ungroup()
 
   #Total
 

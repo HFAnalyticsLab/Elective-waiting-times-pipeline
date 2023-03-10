@@ -2,10 +2,6 @@
 ################### DEVELOPMENT IDEAS ####################
 ##########################################################
 
-#Proportion 52 weeks or more, why 0% before ~March 2021?
-#Chart chart of IS/non-IS by specialty?
-#There are probably faster ways to reproduce dashboard metrics than using custom-written functions
-
 ##############################################
 ################### SETUP ####################
 ##############################################
