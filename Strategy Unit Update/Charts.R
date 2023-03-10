@@ -2,51 +2,15 @@
 ################### TO DO ################
 ##########################################
 
-# National results 
-# 
-# Chart 2a: 1.3.2 
-# 
-# Chart 2b: 1.3.1 
-# 
-# Chart 4a: 4.1.2 
-# 
-# Chart 4b: 4.2.2 
-# 
-# Chart 5a: 4.1.3 
-# 
-# Chart 5b: 4.2.3 
-# 
-# Chart 6 a-b-c: 3.1.1.1 
-# 
-# Chart 7 a-b: 3.2.1.1 
-# 
-# Chart 8a: 5.1 
-# 
-# Chart 8b: 5.2 
-# 
-# Sub-national eye 
-# 
-# Chart 3a: 1.1.1 and 1.1.2 (please also include England average) 
-# 
-# Sub-national orthopedic 
-# 
-# Chart 3b: 1.1.1 and 1.1.2 (please also include England average)
-
 ###########################################
 ################### Set-up ################
 ###########################################
 
 ###### Libraries ######
 
-#Some of these might not be needed
 library(tidyverse)
-library(stringr)
-library(tidyr)
-library(purrr)
-library(pbapply)
 library(data.table)
 library(readxl)
-library(ggrepel)
 library(aws.s3)
 
 #Clean up the global environment
