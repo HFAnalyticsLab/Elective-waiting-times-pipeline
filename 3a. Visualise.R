@@ -101,7 +101,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme(plot.title = element_text(size = 10),
                 axis.title = element_text(size = 8))
     
-    if(as.Date(start_date) < lockdown$data$xmin[1]){
+    if(is.na(start_date) | as.Date(start_date) < lockdown$data$xmin[1]){
           p <- p + lockdown}
 }
 
@@ -132,7 +132,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
           theme(plot.title = element_text(size = 10),
                 axis.title = element_text(size = 8))
     
-      if(as.Date(start_date) < lockdown$data$xmin[1]){
+      if(is.na(start_date) | as.Date(start_date) < lockdown$data$xmin[1]){
         q <- q + lockdown}
         
   }
@@ -144,7 +144,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     theme_minimal() +
     theme(axis.title = element_text(size = 8))
   
-  if(as.Date(start_date) < lockdown$data$xmin[1]){
+  if(is.na(start_date) | as.Date(start_date) < lockdown$data$xmin[1]){
     r <- r + lockdown}
   
   s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = Provider)) +
@@ -154,7 +154,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     theme_minimal() +
     theme(axis.title = element_text(size = 8))
   
-  if(as.Date(start_date) < lockdown$data$xmin[1]){
+  if(is.na(start_date) | as.Date(start_date) < lockdown$data$xmin[1]){
     s <- s + lockdown}
     
   
