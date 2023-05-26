@@ -186,7 +186,7 @@ for (i in chart_pathway){
   
 }
 
-## chart function to plot new clokc starts only
+## chart function to plot new clock starts only
 plot_newRTT <- function(ccg_code = 'ENGLAND',
                         quantiles = c(0.95, 0.50),
                         specialty,
@@ -342,3 +342,4 @@ write_csv(data_export, file = 'RTT_processed.csv')
 put_object(file = 'RTT_processed.csv',
            object = paste0(RTT_subfolder, '/RTT_processed.csv'),
            bucket = IHT_bucket)
+unlink('RTT_processed.csv')
