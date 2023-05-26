@@ -171,3 +171,9 @@ for (j in all_specialties){
   
 }
 
+# move all plots to s3
+s3sync(path = 'Charts/',
+       bucket = IHT_bucket,
+       prefix = 'RTT waiting times data/Charts/',
+       direction = 'upload')
+unlink('Charts', recursive = TRUE)
