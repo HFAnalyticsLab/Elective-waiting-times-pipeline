@@ -56,6 +56,13 @@ if (file.exists(paste0(temp_folder,"/temp files"))) {
 ################### Web-scraping ####################
 #####################################################
 
+#2023-2024
+months2324 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
+years2324 <- c(rep(23,9),rep(24,3))
+series2324 <- rep(2324,length(months2324))
+input2324 <- cbind.data.frame(month=paste0(months2324,years2324),series=series2324)
+rm(months2324,years2324,series2324)
+
 #2022-2023
 months2223 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
 years2223 <- c(rep(22,9),rep(23,3))
@@ -93,15 +100,17 @@ rm(months1819,years1819,series1819)
 
 #All together
 
-inputs <- plyr::rbind.fill(input2223,input2122,input2021,input1920,input1819)
-rm(input2223,input2122,input2021,input1920,input1819)
+inputs <- plyr::rbind.fill(input2324,input2223,input2122,input2021,input1920,input1819)
+rm(input2324,input2223,input2122,input2021,input1920,input1819)
 
 #Function that reports links to 3 files for each month
 
 return_links_rtt <- function(month,series){
   
   #Find landing page for the appropriate financial year
-  if (series=="2223"){
+  if (series=="2324"){
+    read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2023-24/")
+  } else if (series=="2223"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2022-23/")
   } else if (series=="2122"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2021-22/")
@@ -163,9 +172,10 @@ rm(inputs,links.out)
 
 #links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 3 months
 
+## this bit not true now as NHS must have fixed the link
 # April 2022 does not follow the same pattern for links so add manually
-missing <- 'https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2022/06/NonAdmitted-Provider-Apr-22-XLS-8573K-57873.xls'
-links.out.df$providers.link.nonadm$Apr22 <- missing
+# missing <- 'https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2022/06/NonAdmitted-Provider-Apr-22-XLS-8573K-57873.xls'
+# links.out.df$providers.link.nonadm$Apr22 <- missing
 ###########################################################
 ################### Download all files ####################
 ###########################################################
@@ -176,7 +186,8 @@ already_there <- list.dirs(path = paste0(temp_folder,"/temp files"), full.names 
   str_replace_all(.,paste0(temp_folder,"/temp files/"),"")
 
 #Download a set of files for each month (unless already there locally)
-
+## now xlsx files turning up in more recent data as well as xls previously
+## use tools::file_ext() to extract and assign correctly
 for (k in 1:nrow(links.out.df)){
   
 if (links.out.df$month[k] %in% already_there){
