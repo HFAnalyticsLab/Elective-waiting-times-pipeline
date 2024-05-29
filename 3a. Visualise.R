@@ -276,7 +276,9 @@ for (j in all_specialties){
     n <- n + 1
     
 }
-  
+
+s3sync(files = dir('Charts_2024_05_29', recursive = TRUE),
+       bucket = IHT_bucket, direction = 'upload')
 ## get data only to export to excel
 RTT_comp_data <- function(ccg_code = 'ENGLAND',
                           specialty,
