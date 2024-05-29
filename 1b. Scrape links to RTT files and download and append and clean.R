@@ -195,7 +195,6 @@ if (links.out.df$month[k] %in% already_there){
 }
   else{
     cat("Downloading new files")
-    ### Full CSV
     
     #Download Full CSV in workbench
     download(as.character(links.out.df$full.csv.link[k]),
@@ -206,29 +205,29 @@ if (links.out.df$month[k] %in% already_there){
     #Delete zip file
     file.remove(paste0("RTT_temp_data/temp files/",links.out.df$month[k],".zip"))
     
-    ### New providers
-    
     #Download New Providers
     download(as.character(links.out.df$providers.link.new[k]),
              dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
-                         links.out.df$month[k],"-newproviders.xls"), mode="wb")
-    
-    ### Admitted providers
+                         links.out.df$month[k],"-newproviders.", 
+                         tools::file_ext(links.out.df$providers.link.new[k])),
+             mode="wb")
     
     #Download Admitted Providers
     download(as.character(links.out.df$providers.link.adm[k]),
              dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
-                         links.out.df$month[k],"-providers-admitted.xls"), mode="wb")
-    
-    ### Non-admitted providers
+                         links.out.df$month[k],"-providers-admitted.",
+                         tools::file_ext(links.out.df$providers.link.adm[k])),
+             mode="wb")
     
     #Download Non-Admitted Providers
     download(as.character(links.out.df$providers.link.nonadm[k]),
              dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
-                         links.out.df$month[k],"-providers-nonadmitted.xls"), mode="wb")
+                         links.out.df$month[k],"-providers-nonadmitted.",
+                         tools::file_ext(links.out.df$providers.link.nonadm[k])), 
+             mode="wb")
     
     ### Incomplete providers
     
@@ -236,7 +235,9 @@ if (links.out.df$month[k] %in% already_there){
     download(as.character(links.out.df$providers.link.incomp[k]),
              dest=paste0("RTT_temp_data/temp files/",
                          paste(links.out.df$month[k]),"/",
-                         links.out.df$month[k],"-providers-incomplete.xls"), mode="wb") 
+                         links.out.df$month[k],"-providers-incomplete.",
+                         tools::file_ext(links.out.df$providers.link.incomp[k])),
+             mode="wb") 
   }
 }
 
@@ -254,19 +255,24 @@ for (s in 1:nrow(links.out.df)){
   setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
   setwd(as.character(links.out.df$month[s]))
   
-  incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
+  incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.",
+                                  tools::file_ext(links.out.df$providers.link.incomp[s])),
                            sheet = "IS Provider",skip=13)
   
-  incompleteDTA <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.xls"),
+  incompleteDTA <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.",
+                                     tools::file_ext(links.out.df$providers.link.incomp[s])),
                            sheet = "IS Provider with DTA",skip=13)
   
-  new_provider <- read_excel(paste0(links.out.df$month[s],"-newproviders.xls"),
+  new_provider <- read_excel(paste0(links.out.df$month[s],"-newproviders.",
+                                    tools::file_ext(links.out.df$providers.link.new[s])),
                              sheet = "IS Provider",skip=13)
   
-  adm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-admitted.xls"),
+  adm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-admitted.",
+                                    tools::file_ext(links.out.df$providers.link.adm[s])),
                              sheet = "IS Provider",skip=13)
   
-  nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.xls"),
+  nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.",
+                                       tools::file_ext(links.out.df$providers.link.nonadm[s])),
                                 sheet = "IS Provider",skip=13)
   
   #IS providers for that month
