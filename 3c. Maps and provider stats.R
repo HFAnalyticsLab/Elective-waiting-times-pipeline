@@ -44,6 +44,9 @@ latlong="+init=epsg:4326"
 fy_202122 <- c("RTT-APRIL-2021","RTT-MAY-2021","RTT-JUNE-2021","RTT-JULY-2021",
   "RTT-AUGUST-2021","RTT-SEPTEMBER-2021","RTT-OCTOBER-2021","RTT-NOVEMBER-2021","RTT-DECEMBER-2021",
   "RTT-JANUARY-2022","RTT-FEBRUARY-2022","RTT-MARCH-2022")
+fy_202324 <- c("RTT-APRIL-2023","RTT-MAY-2023","RTT-JUNE-2023","RTT-JULY-2023","RTT-AUGUST-2023",
+               "RTT-SEPTEMBER-2023","RTT-OCTOBER-2023","RTT-NOVEMBER-2023","RTT-DECEMBER-2023",
+               "RTT-JANUARY-2024","RTT-FEBRUARY-2024","RTT-MARCH-2024")
 pre_COVID <- c(paste("RTT",toupper(month.name),"2017",sep="-"),
   paste("RTT",toupper(month.name),"2018",sep="-"),
   paste("RTT",toupper(month.name),"2019",sep="-"),
@@ -52,7 +55,8 @@ during_COVID <- c(paste("RTT",toupper(month.name)[3:12],"2020",sep="-"),
                   paste("RTT",toupper(month.name)[1:5],"2021",sep="-"))
 post_COVID <- c(paste("RTT",toupper(month.name)[6:12],"2021",sep="-"),
                 paste("RTT",toupper(month.name),"2022",sep="-"),
-                paste("RTT",toupper(month.name),"2023",sep="-"))
+                paste("RTT",toupper(month.name),"2023",sep="-"),
+                paste("RTT",toupper(month.name)[1:3],"2024",sep="-"))
 
 ###############################################
 ################### Load files ################
@@ -114,7 +118,7 @@ RTT_allmonths <- RTT_allmonths %>%
 #All specialties
 number_specialties_by_provider <- RTT_allmonths %>%
   filter(.,Treatment.Function.Name!="Total") %>% #Total is not a specialty, we don't need to count it
-  mutate(.,vol_2122=ifelse(toupper(Period) %in% fy_202122,Total.All,NA)) %>% 
+  mutate(.,vol_2122=ifelse(toupper(Period) %in% fy_202324,Total.All,NA)) %>% 
   group_by(Provider.Org.Code) %>%
   summarise(IS_status=ifelse(max(IS_provider)==1,"IS","NHS"),
             Provider.Org.Name=first(Provider.Org.Name),
@@ -221,11 +225,9 @@ flourish2_b <- timelines_raw %>%
 flourish2 <- plyr::rbind.fill(flourish2_a,flourish2_b)
 rm(flourish2_a,flourish2_b)
 
-fwrite(flourish1,
-       paste0(R_workbench,"/Charts/","timeline_all.csv"))
+fwrite(flourish1, "timeline_all.csv")
 
-fwrite(flourish2,
-       paste0(R_workbench,"/Charts/","timeline_ophth.csv"))
+fwrite(flourish2, "timeline_ophth.csv")
 
 ##### Pre/post analysis
 
@@ -322,8 +324,7 @@ prepost_b <- prepost_raw %>%
 flourish3 <- plyr::rbind.fill(prepost_a,prepost_b)
 rm(prepost_a,prepost_b)
 
-fwrite(flourish3,
-       paste0(R_workbench,"/Charts/","prepost_all.csv"))
+fwrite(flourish3, "prepost_all.csv")
 
 #####################################################
 ################### Map of providers ################
@@ -445,7 +446,7 @@ region_pop_2020 <- region_pop_2020 %>%
 
 completed_region_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202122),
+  filter(.,(Period %in% fy_202324),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
          Treatment.Function.Name=="Total") %>%
   group_by(region,IS_provider) %>%
@@ -462,7 +463,7 @@ completed_region_table <- RTT_allmonths %>%
 
 regions_casemix_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202122),
+  filter(.,(Period %in% fy_202324),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
          Treatment.Function.Name!="Total") %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
@@ -493,7 +494,7 @@ case_mix_chart <- regions_casemix_table %>%
   theme_bw() +
   xlab("Sector") +
   ylab("Completed pathways per 100 people (2021/22)") +
-  scale_fill_brewer(palette = "Set2") +
+  #scale_fill_brewer(palette = "Set2") +
   theme(legend.position="bottom",
         panel.border = element_blank(),
         strip.text = element_text(size=5),
@@ -551,7 +552,7 @@ ggsave(plot=region_chart, paste0(R_workbench,"/Charts/","region_chart.png"), wid
 
 regions_casemix_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202122),
+  filter(.,(Period %in% fy_202324),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
                                      "Completed Pathways For Non-Admitted Patients")) %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
@@ -587,7 +588,7 @@ regions_casemix_table <- RTT_allmonths %>%
 
 england_casemix_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202122),
+  filter(.,(Period %in% fy_202324),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
                                      "Completed Pathways For Non-Admitted Patients")) %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
@@ -658,7 +659,7 @@ completed_imd_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
   filter(Treatment.Function.Name=="Total",
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
-         (Period %in% fy_202122)) %>% 
+         (Period %in% fy_202324)) %>% 
   #mutate(year_clean=word(Period,3,sep="-")) %>%
   mutate(year_clean="1") %>%
   group_by(year_clean,IMD19_quintile,IS_provider) %>%
@@ -678,7 +679,7 @@ completed_imd_table_alt <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>%
   filter(Treatment.Function.Name=="Total",
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
-         (Period %in% fy_202122)) %>% 
+         (Period %in% fy_202324)) %>% 
   #mutate(year_clean=word(Period,3,sep="-")) %>%
   mutate(year_clean="2020/21",
          IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
