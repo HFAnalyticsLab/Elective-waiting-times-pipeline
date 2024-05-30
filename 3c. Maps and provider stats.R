@@ -118,14 +118,14 @@ RTT_allmonths <- RTT_allmonths %>%
 #All specialties
 number_specialties_by_provider <- RTT_allmonths %>%
   filter(.,Treatment.Function.Name!="Total") %>% #Total is not a specialty, we don't need to count it
-  mutate(.,vol_2122=ifelse(toupper(Period) %in% fy_202324,Total.All,NA)) %>% 
+  mutate(.,vol_2324=ifelse(toupper(Period) %in% fy_202324,Total.All,NA)) %>% 
   group_by(Provider.Org.Code) %>%
   summarise(IS_status=ifelse(max(IS_provider)==1,"IS","NHS"),
             Provider.Org.Name=first(Provider.Org.Name),
             number_specialties=n_distinct(Treatment.Function.Name), #Number of specialties
             specialties=paste(unique(Treatment.Function.Name),collapse=', '), #List of specialties
             has_opht=max(ifelse(Treatment.Function.Name=="Ophthalmology",1,0)), #Has ophthalmology
-            total_vol_2122=sum(vol_2122,na.rm=TRUE)) %>%
+            total_vol_2324=sum(vol_2324,na.rm=TRUE)) %>%
   ungroup() %>%
   mutate(.,spec_mix_map=case_when(number_specialties<=1 ~ specialties,
                                 number_specialties>1 ~ "Multi-specialty"))
@@ -135,7 +135,7 @@ RTT_provider_locations <- RTT_provider_locations %>%
   left_join(.,provider_names,by="Provider.Org.Code") %>% #Add names
   left_join(.,select(provider_to_IMD_region,Provider.Org.Code,region),by="Provider.Org.Code") %>% #Add region
   left_join(.,select(number_specialties_by_provider,Provider.Org.Code,IS_status,
-                     number_specialties,spec_mix_map,has_opht,total_vol_2122),by="Provider.Org.Code")
+                     number_specialties,spec_mix_map,has_opht,total_vol_2324),by="Provider.Org.Code")
 
 #Turn into a shapefile
 RTT_providers_shapefile <- SpatialPointsDataFrame(cbind(RTT_provider_locations$long,
@@ -333,21 +333,21 @@ fwrite(flourish3, "prepost_all.csv")
 ############ Volume
 
 #Only for IS
-RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&total_vol_2122>1000)
+RTT_providers_shapefile_IS <- subset(RTT_providers_shapefile,IS_status=="IS"&total_vol_2324>1000)
 
 #Data for Flourish
 provider_map_flourish <- RTT_providers_shapefile_IS@data %>%
   select(.,Provider.Org.Code,Provider.Postcode,lat,long,
          Provider.Org.Name,region,IS_status,number_specialties,has_opht,
-         spec_mix_map,total_vol_2122) %>%
-  mutate(log_volume=log(total_vol_2122),
-         sqrt_volume=(total_vol_2122)^0.5,
-         custom_volume=(total_vol_2122^0.35)/17,
+         spec_mix_map,total_vol_2324) %>%
+  mutate(log_volume=log(total_vol_2324),
+         sqrt_volume=(total_vol_2324)^0.5,
+         custom_volume=(total_vol_2324^0.35)/17,
          has_opht_shape=ifelse(has_opht==1,"circle","square"))
   
 s3write_using(provider_map_flourish # What R object we are saving
               , FUN = fwrite # Which R function we are using to save
-              , object = paste0(RTT_subfolder,"/Data for provider map 2122.csv") # Name of the file to save to (include file type)
+              , object = paste0(RTT_subfolder,"/Data for provider map 2324.csv") # Name of the file to save to (include file type)
               , bucket = IHT_bucket) # Bucket name defined above
 
 #############################################################
@@ -463,7 +463,7 @@ completed_region_table <- RTT_allmonths %>%
 
 regions_casemix_table <- RTT_allmonths %>%
   left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202324),
+  filter(.,(toupper(Period) %in% fy_202324),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
          Treatment.Function.Name!="Total") %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
@@ -493,19 +493,20 @@ case_mix_chart <- regions_casemix_table %>%
   facet_wrap(~IS_provider,ncol=2) +
   theme_bw() +
   xlab("Sector") +
-  ylab("Completed pathways per 100 people (2021/22)") +
-  #scale_fill_brewer(palette = "Set2") +
+  ylab("Completed pathways per 100 people (2023/24)") +
+  scale_colour_steps2() +
   theme(legend.position="bottom",
+        legend.key.size = unit(0.1, 'cm'),
         panel.border = element_blank(),
-        strip.text = element_text(size=5),
-        text = element_text(size = 5),
-        legend.title=element_text(size=5),
-        legend.text=element_text(size=5),
-        axis.text = element_text(size = 5),
-        axis.text.y = element_text(size = 5),
-        axis.text.x = element_text(angle = 45, hjust = 1,size = 5),
+        strip.text = element_text(size=7),
+        text = element_text(size = 7),
+        legend.title=element_text(size=7),
+        legend.text=element_text(size=7),
+        axis.text = element_text(size = 7),
+        axis.text.y = element_text(size = 7),
+        axis.text.x = element_text(angle = 45, hjust = 1,size = 8),
         axis.title.x = element_text(margin = unit(c(3, 0, 0, 0), "mm"),size = 5),
-        axis.title.y = element_text(size = 5))
+        axis.title.y = element_text(size = 8))
 
 case_mix_chart
 
