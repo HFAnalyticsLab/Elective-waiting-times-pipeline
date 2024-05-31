@@ -22,7 +22,7 @@ library(janitor)
 library(aws.s3)
 library(googleway)
 library(rgdal)
-
+library(aws.ec2metadata)
 #Clean up the global environment
 
 rm(list = ls())
@@ -37,7 +37,7 @@ git_directory <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 #Google Maps API
 
-setwd(git_directory)
+#setwd(git_directory)
 source("API keys.R")
 
 #####################################################
@@ -45,7 +45,7 @@ source("API keys.R")
 #####################################################
 
 # RTT_allmonths <- s3read_using(fread
-#                               , object = paste0(RTT_subfolder,"/","RTT_allmonths.csv") # File to open
+#                               , object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv") # File to open
 #                               , bucket = IHT_bucket) # Bucket name defined above
 # 
 # all_providers <- RTT_allmonths %>%
@@ -60,10 +60,11 @@ source("API keys.R")
 #               , bucket = IHT_bucket) # Bucket name defined above
 
 all_providers <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/Locating providers/","all_providers.csv") # File to open
+                              , object = paste0(RTT_subfolder,"/all_providers.csv") # File to open
                               , bucket = IHT_bucket, header=TRUE, drop=1) # Bucket name defined above
 
-#Remove duplicates: all 500 are here
+#Remove duplicates: all 500 are here 
+# update 543 now 01/03/2024
 all_providers <- all_providers %>%
   group_by(Provider.Org.Code) %>%
   summarise(Provider.Org.Name=first(Provider.Org.Name)) %>%
@@ -131,7 +132,7 @@ all_providers_with_nhs_loc <- left_join(all_providers,nhs.providers,by=c("Provid
 
 missing_providers <- all_providers_with_nhs_loc %>%
   filter(.,is.na(pcode)) %>%
-  pull(Provider.Org.Code)
+  pull(Provider.Org.Name)
 
 #Search for postcodes
 
@@ -222,7 +223,7 @@ out.search.pcodes <- pbmapply(search_postcode_google_catch,
                                  orgcode=pcode.args,
                                  MoreArgs = list(type="none"))
 out.search.pcodes.df <- as.data.frame(t(out.search.pcodes)) %>%
-  filter(.,!is.na(Provider.Postcode))
+  filter(.,!is.na(Provider.Org.Pcode))
   
 #Add those that weren't in NHS database
 #This uses a search based on provider names (see next section of code)
@@ -259,7 +260,7 @@ s3write_using(out.search.pcodes.df # What R object we are saving
 search_hospitals_google <- function(orgcode,type){
   
   #Provider name and code
-  orgname <- filter(all_providers_sample,Provider.Org.Code==orgcode) %>%
+  orgname <- filter(all_providers_with_nhs_loc,Provider.Org.Code==orgcode) %>%
     head(.,n=1) %>% 
     pull(Provider.Org.Name) %>%
     unlist()
@@ -321,7 +322,7 @@ search_hospitals_google_catch <- function(orgcode,type){
     error=function(error_message) {
       
       #Provider name and code
-      orgname <- filter(all_providers_sample,Provider.Org.Code==orgcode) %>%
+      orgname <- filter(all_providers_with_nhs_loc,Provider.Org.Code==orgcode) %>%
         head(.,n=1) %>% 
         pull(Provider.Org.Name) %>%
         unlist()
@@ -345,10 +346,10 @@ search_hospitals_google_catch <- function(orgcode,type){
 
 ################### First loop, using hospital tag
 
-first.args <- all_providers_sample$Provider.Org.Code
+first.args <- all_providers_with_nhs_loc[is.na(all_providers_with_nhs_loc$pcode), 'Provider.Org.Code']
 
 out.search.hospitals <- pbmapply(search_hospitals_google_catch,
-                                 orgcode=first.args,
+                                 orgcode=first.args$Provider.Org.Code,
                                  MoreArgs = list(type="hospital"))
 out.search.hospitals.df <- as.data.frame(t(out.search.hospitals))
 
