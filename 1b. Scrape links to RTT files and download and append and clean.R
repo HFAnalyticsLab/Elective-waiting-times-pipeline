@@ -281,8 +281,10 @@ for (s in 1:nrow(links.out.df)){
              incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
   names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,
              incomplete$`Provider Name`,incompleteDTA$`Provider Name`)
-  summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names)
-  rm(incomplete,incompleteDTA,new_provider,adm_provider,nonadm_provider,codes,names)
+  region <- c(new_provider$`Region Code`,adm_provider$`Region Code`,nonadm_provider$`Region Code`,
+              incomplete$`Region Code`,incompleteDTA$`Region Code`)
+  summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names,region)
+  rm(incomplete,incompleteDTA,new_provider,adm_provider,nonadm_provider,codes,names,region)
   
   #Successively append files
   
