@@ -245,7 +245,7 @@ if (links.out.df$month[k] %in% already_there){
 rm(already_there)
 
 ###########################################################################
-################### Append all provider files into one ####################
+################### Append all IS provider files into one #################
 ###########################################################################
 
 for (s in 1:nrow(links.out.df)){
@@ -304,6 +304,65 @@ setwd(paste0(R_workbench,"/",temp_folder,"/"))
 fwrite(IS_providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
                                              "/IS_providers_allmonths.csv"), sep = ",")
 rm(IS_providers_allmonths)
+
+#### Get all NHS provider locations / region
+for (s in 1:nrow(links.out.df)){
+  
+  #Open all provider files for one month and append
+  
+  setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
+  setwd(as.character(links.out.df$month[s]))
+  
+  incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.",
+                                  tools::file_ext(links.out.df$providers.link.incomp[s])),
+                           sheet = "Provider",skip=13)
+  
+  incompleteDTA <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.",
+                                     tools::file_ext(links.out.df$providers.link.incomp[s])),
+                              sheet = "Provider with DTA",skip=13)
+  
+  new_provider <- read_excel(paste0(links.out.df$month[s],"-newproviders.",
+                                    tools::file_ext(links.out.df$providers.link.new[s])),
+                             sheet = "Provider",skip=13)
+  
+  adm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-admitted.",
+                                    tools::file_ext(links.out.df$providers.link.adm[s])),
+                             sheet = "Provider",skip=13)
+  
+  nonadm_provider <- read_excel(paste0(links.out.df$month[s],"-providers-nonadmitted.",
+                                       tools::file_ext(links.out.df$providers.link.nonadm[s])),
+                                sheet = "Provider",skip=13)
+  
+  #IS providers for that month
+  
+  codes <- c(new_provider$`Provider Code`,adm_provider$`Provider Code`,nonadm_provider$`Provider Code`,
+             incomplete$`Provider Code`,incompleteDTA$`Provider Code`)
+  names <- c(new_provider$`Provider Name`,adm_provider$`Provider Name`,nonadm_provider$`Provider Name`,
+             incomplete$`Provider Name`,incompleteDTA$`Provider Name`)
+  region <- c(new_provider$`Region Code`,adm_provider$`Region Code`,nonadm_provider$`Region Code`,
+              incomplete$`Region Code`,incompleteDTA$`Region Code`)
+  summary_month <- data.frame(monthyr=rep(as.character(links.out.df$month[s]),length(codes)),codes,names,region)
+  rm(incomplete,incompleteDTA,new_provider,adm_provider,nonadm_provider,codes,names,region)
+  
+  #Successively append files
+  
+  if (s==1) {
+    storage <- summary_month
+  } else {
+    storage <- plyr::rbind.fill(storage,summary_month)
+  }
+}
+
+#Remove duplicates
+providers_allmonths <- storage[!duplicated(storage), ]
+rm(storage,summary_month)
+
+#Save
+setwd(paste0(R_workbench,"/",temp_folder,"/"))
+fwrite(providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
+                                             "/providers_allmonths.csv"), sep = ",")
+rm(IS_providers_allmonths)
+
 
 ########################################################################################
 ################### Append all monthly waiting times files into one ####################
@@ -372,5 +431,10 @@ put_object(file = 'RTT_allmonths_new.csv',
 
 put_object(file = 'IS_providers_allmonths.csv',
            object = paste0(RTT_subfolder,"/","IS_providers_allmonths.csv"),
+           bucket = IHT_bucket, show_progress = TRUE,
+           multipart=TRUE)
+
+put_object(file = 'providers_allmonths.csv',
+           object = paste0(RTT_subfolder,"/","providers_allmonths.csv"),
            bucket = IHT_bucket, show_progress = TRUE,
            multipart=TRUE)
