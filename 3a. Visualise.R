@@ -94,7 +94,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     
     p <-  ggplot(result, aes(date, total.patients, fill = Provider)) +
           geom_col() +
-          geom_line(aes(y = prop1 * b1 * 100), color = 'black', size = 2) +
+          geom_line(aes(y = prop1 * b1 * 100), color = 'black', linewidth = 2) +
           scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio1)) +
           theme_minimal() +
           ggtitle('Proportion of patients with IS care\n delivered with patient volume') +
@@ -125,7 +125,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     
     q <- ggplot(result, aes(date, num18.or.less_noNA, fill = Provider)) +
           geom_col() +
-          geom_line(aes(y = prop2 * b2 * 100), color = 'black', size = 2) +
+          geom_line(aes(y = prop2 * b2 * 100), color = 'black', linewidth = 2) +
           scale_y_continuous('Patient volume', sec.axis = sec_axis(~./ratio2)) +
           theme_minimal() +
           ggtitle('Proportion of patients with IS care delivered\n in <18 weeks with patient volume') +
@@ -138,7 +138,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
   }
   
   r <- ggplot(result, aes(x = date, y = weeks.50, colour = Provider)) +
-    geom_line(size=1) +
+    geom_line(linewidth=1) +
     ggtitle(chart_title) +
     ylab('Median weeks') +
     theme_minimal() +
@@ -148,7 +148,7 @@ plot_RTT_comp <- function(ccg_code = 'ENGLAND',
     r <- r + lockdown}
   
   s <- ggplot(result, aes(x = date, y = rate.52wks.or.more, colour = Provider)) +
-    geom_line(size=1) +
+    geom_line(linewidth=1) +
     ggtitle(chart_title) +
     ylab('Proportion > 52 weeks') +
     theme_minimal() +
