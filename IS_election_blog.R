@@ -78,7 +78,6 @@ region_pop_2022 <- data.frame(name=c('London', 'South East', 'South West',
                               region=c('Y56','Y59','Y58','Y60','Y63','Y61','Y62'),
                               pop20=c(8866180,9073701,5771573,10956592,8540584,6697937,7199831))
 
-
 ## get data from full RTT
 reg_join <- RTT_allmonths %>%
   filter(toupper(Period) %in% fy_202324 &
