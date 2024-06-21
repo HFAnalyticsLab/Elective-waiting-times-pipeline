@@ -55,60 +55,30 @@ if (file.exists(paste0(temp_folder,"/temp files"))) {
 #####################################################
 ################### Web-scraping ####################
 #####################################################
-
-#2023-2024
-months2324 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years2324 <- c(rep(23,9),rep(24,3))
-series2324 <- rep(2324,length(months2324))
-input2324 <- cbind.data.frame(month=paste0(months2324,years2324),series=series2324)
-rm(months2324,years2324,series2324)
-
-#2022-2023
-months2223 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years2223 <- c(rep(22,9),rep(23,3))
-series2223 <- rep(2223,length(months2223))
-input2223 <- cbind.data.frame(month=paste0(months2223,years2223),series=series2223)
-rm(months2223,years2223,series2223)
-
-#2020-2021
-months2122 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years2122 <- c(rep(21,9),rep(22,3))
-series2122 <- rep(2122,length(months2122))
-input2122 <- cbind.data.frame(month=paste0(months2122,years2122),series=series2122)
-rm(months2122,years2122,series2122)
-
-#2019-2020
-months2021 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years2021 <- c(rep(20,9),rep(21,3))
-series2021 <- rep(2021,length(months2021))
-input2021 <- cbind.data.frame(month=paste0(months2021,years2021),series=series2021)
-rm(months2021,years2021,series2021)
-
-#2019-2020
-months1920 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years1920 <- c(rep(19,9),rep(20,3))
-series1920 <- rep(1920,length(months1920))
-input1920 <- cbind.data.frame(month=paste0(months1920,years1920),series=series1920)
-rm(months1920,years1920,series1920)
-
-#2018-2019
-months1819 <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
-years1819 <- c(rep(18,9),rep(19,3))
-series1819 <- rep(1819,length(months1819))
-input1819 <- cbind.data.frame(month=paste0(months1819,years1819),series=series1819)
-rm(months1819,years1819,series1819)
+year_lkup <- function(y, l=12){
+  
+  m <- c("Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar")
+  year <- c(rep(y,9),rep(y+1,3))
+  series <- rep(as.character(paste0(y, y+1)), 12)
+  return(
+    cbind.data.frame(month=paste0(m,year),series=series) %>%
+      head(l)
+  )
+  
+}
 
 #All together
 
-inputs <- plyr::rbind.fill(input2324,input2223,input2122,input2021,input1920,input1819)
-rm(input2324,input2223,input2122,input2021,input1920,input1819)
+inputs <- plyr::rbind.fill(year_lkup(24,1),year_lkup(23),year_lkup(22),year_lkup(21),year_lkup(20),year_lkup(19),year_lkup(18))
 
 #Function that reports links to 3 files for each month
 
 return_links_rtt <- function(month,series){
   
   #Find landing page for the appropriate financial year
-  if (series=="2324"){
+  if (series=="2425"){
+    read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2024-25/")
+  } else if (series=="2324"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2023-24/")
   } else if (series=="2223"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2022-23/")
