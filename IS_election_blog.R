@@ -81,9 +81,7 @@ region_pop_2022 <- data.frame(name=c('London', 'South East', 'South West',
 ## get data from full RTT
 reg_join <- RTT_allmonths %>%
   filter(toupper(Period) %in% fy_202324 &
-           RTT.Part.Description %in% c("Completed Pathways For Admitted Patients",
-                                     "Completed Pathways For Non-Admitted Patients") &
-           !(is.na(Provider.Org.Code))) %>%
+         RTT.Part.Description == 'Completed Pathways For Admitted Patients') %>%
   select(-starts_with('Gt.')) %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
   left_join(.,a,by = c("Provider.Org.Code" = "codes"))
@@ -107,8 +105,28 @@ reg_join$region[is.na(reg_join$region) &
                   reg_join$Provider.Parent.Name == 'NHS SOUTH EAST LONDON INTEGRATED CARE BOARD'] <- 'Y56'
 #### end ####
 
+## which specialties have highest volume over the year?
+reg_join %>%
+  select(Treatment.Function.Name, Total.All) %>%
+  group_by(Treatment.Function.Name) %>%
+  summarise(Total = sum(Total.All)) %>%
+  arrange(-Total) %>%
+  filter(Treatment.Function.Name != 'Other') %>%
+  head(11)
+
 # region casemix table ####
 regions_casemix <- reg_join %>%
+  filter(Treatment.Function.Name %in% c("Total",
+                                        "Ophthalmology",
+                                        "Trauma and Orthopaedic",
+                                        "General Surgery",
+                                        "Urology",
+                                        "Gastroenterology",
+                                        "Gynaecology",
+                                        "Oral Surgery",
+                                        "Plastic Surgery",
+                                        "Ear Nose and Throat",
+                                        "Dermatology")) %>% 
   group_by(region,RTT.Part.Description,IS_provider,Treatment.Function.Name) %>%
   summarise(Total.All.Type.Treat=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
@@ -126,22 +144,22 @@ regions_casemix <- reg_join %>%
   group_by( RTT.Part.Description,Treatment.Function.Name) %>%
   mutate(avg_IS=weighted.mean(pct_IS,All,na.rm=TRUE)) %>% 
   ungroup() %>%
-  filter(Treatment.Function.Name %in% c("Total",
-                                        "Dermatology",
-                                        "Gastroenterology",
-                                        "General Internal Medicine",
-                                        "General Surgery",
-                                        "Gynaecology",
-                                        "Neurosurgery",
-                                        "Ophthalmology",
-                                        "Oral Surgery",
-                                        "Trauma and Orthopaedic",
-                                        "Urology")) %>% 
   arrange(.,RTT.Part.Description,region,desc(avg_IS))
 # end ####
 
 # England casemix table ####
 england_casemix_table <- reg_join %>%
+  filter(Treatment.Function.Name %in% c("Total",
+                                        "Ophthalmology",
+                                        "Trauma and Orthopaedic",
+                                        "General Surgery",
+                                        "Urology",
+                                        "Gastroenterology",
+                                        "Gynaecology",
+                                        "Oral Surgery",
+                                        "Plastic Surgery",
+                                        "Ear Nose and Throat",
+                                        "Dermatology")) %>% 
   group_by(RTT.Part.Description,IS_provider,Treatment.Function.Name) %>%
   summarise(Total.All.Type.Treat=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
@@ -159,17 +177,6 @@ england_casemix_table <- reg_join %>%
   mutate(avg_IS=weighted.mean(pct_IS,All,na.rm=TRUE),
          region="England") %>% 
   ungroup() %>%
-  filter(Treatment.Function.Name %in% c("Total",
-                                        "Dermatology",
-                                        "Gastroenterology",
-                                        "General Internal Medicine",
-                                        "General Surgery",
-                                        "Gynaecology",
-                                        "Neurosurgery",
-                                        "Ophthalmology",
-                                        "Oral Surgery",
-                                        "Trauma and Orthopaedic",
-                                        "Urology")) %>% 
   arrange(.,RTT.Part.Description,region,desc(avg_IS))
 
 # Combine
