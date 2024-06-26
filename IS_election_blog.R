@@ -82,8 +82,8 @@ region_pop_2022 <- data.frame(name=c('London', 'South East', 'South West',
 reg_join <- RTT_allmonths %>%
   filter(toupper(Period) %in% fy_202324 &
          RTT.Part.Description == 'Completed Pathways For Admitted Patients') %>%
-  select(-starts_with('Gt.')) %>%
-  mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
+  #select(-starts_with('Gt.')) %>%
+  #mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>%
   left_join(.,a,by = c("Provider.Org.Code" = "codes"))
 
 #### manually add conflicting region providers ####
@@ -186,5 +186,39 @@ casemix_table <- plyr::rbind.fill(regions_casemix,england_casemix_table) %>%
   rename(Specialty="Treatment.Function.Name",
          `Proportion of care delivered by the independent sector 2023/24`="pct_IS") %>% 
   select(.,region,RTT.Part.Description,Specialty,`Proportion of care delivered by the independent sector 2023/24`)
+
+## check volumes over period
+all_months <- c("May23", "Jun23", "Jul23", "Aug23", "Sep23", "Oct23", "Nov23",
+                "Dec23", "Jan24", "Feb24", "Mar24")
+all_data <- reg_join
+regions <- unique(all_data$region)
+n <- 1
+## save charts
+for (x in c("Total",
+     "Ophthalmology",
+     "Trauma and Orthopaedic",
+     "General Surgery",
+     "Urology",
+     "Gastroenterology",
+     "Gynaecology",
+     "Oral Surgery",
+     "Plastic Surgery",
+     "Ear Nose and Throat",
+     "Dermatology")){
+  
+  for(z in regions){
+    RTT_allmonths <- all_data %>%
+                     filter(region == z)
+    plot_RTT_comp(specialty = x, type = 'completeadmitted', start_date = '2023-05-01')
+    ggsave(paste0('Charts/Chart_', x, '_', z, '.png'), plot = last_plot())
+    
+    print(paste0('Saved ', n, ' of ', 77))
+    
+    n <- n + 1
+    
+  }
+    
+}
+  
 
 
