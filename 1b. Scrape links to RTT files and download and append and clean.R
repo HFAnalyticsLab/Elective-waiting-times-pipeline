@@ -69,7 +69,13 @@ year_lkup <- function(y, l=12){
 
 #All together
 
-inputs <- plyr::rbind.fill(year_lkup(24,1),year_lkup(23),year_lkup(22),year_lkup(21),year_lkup(20),year_lkup(19),year_lkup(18))
+inputs <- plyr::rbind.fill(year_lkup(24,5),
+                           year_lkup(23),
+                           year_lkup(22),
+                           year_lkup(21),
+                           year_lkup(20),
+                           year_lkup(19),
+                           year_lkup(18))
 
 #Function that reports links to 3 files for each month
 
@@ -139,6 +145,9 @@ links.out <- mapply(return_links_rtt,
 links.out.df <- as.data.frame(t(links.out)) %>%
   filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet or don't exist
 rm(inputs,links.out)
+
+## check any missing values
+sum(is.na(links.out.df)) == 0
 
 #links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 3 months
 
