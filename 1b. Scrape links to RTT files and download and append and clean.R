@@ -113,7 +113,7 @@ return_links_rtt <- function(month,series){
   #We're only interested in 5 of those files
   
   #ZIP
-  full.csv.link <- links[str_detect(links, "Full-CSV")][1]
+  full.csv.link <- links[str_detect(links, "Full-CSV|full-extract")][1]
   
   #Provider-level files
   providers.link.incomp <- links[str_detect(links, "Incomplete-Provider")][1]
@@ -144,11 +144,13 @@ links.out <- mapply(return_links_rtt,
                     series = inputs$series)
 links.out.df <- as.data.frame(t(links.out)) %>%
   filter(.,!is.na(full.csv.link)) #Filter out months that haven't been uploaded yet or don't exist
-rm(inputs,links.out)
 
-## check any missing values
+
+## check any missing values if both TRUE we are good
 sum(is.na(links.out.df)) == 0
+nrow(links.out.df) == nrow(inputs)
 
+rm(inputs,links.out) 
 #links.out.df <- head(links.out.df,n=3) #For now, check that it works for the first 3 months
 
 ## this bit not true now as NHS must have fixed the link
