@@ -349,3 +349,9 @@ put_object(file = 'RTT_processed.csv',
            object = paste0(RTT_subfolder, '/RTT_processed.csv'),
            bucket = IHT_bucket)
 unlink('RTT_processed.csv')
+
+## arrow dataset
+library(arrow)
+write_dataset(RTT_allmonths,
+              paste0('s3://', IHT_bucket, '/arrow_rtt'),
+              partitioning = 'monthyr')
