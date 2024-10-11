@@ -277,8 +277,12 @@ for (j in all_specialties){
     
 }
 
-s3sync(files = dir('Charts_2024_05_29', recursive = TRUE),
+## this doesn't just add that folder!
+s3sync(files = dir('Charts_Oct_Update', recursive = TRUE),
        bucket = IHT_bucket, direction = 'upload')
+
+unlink('Charts_Oct_Update')
+
 ## get data only to export to excel
 RTT_comp_data <- function(ccg_code = 'ENGLAND',
                           specialty,

@@ -355,7 +355,6 @@ IS_providers_allmonths <- fread(paste0(R_workbench,"/",temp_folder,"/IS_provider
                                 header=TRUE, sep=",", check.names=T)
 
 #Append all files
-
 for (j in 1:nrow(links.out.df)){
   
   setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
