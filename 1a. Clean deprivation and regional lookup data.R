@@ -34,21 +34,13 @@ source('setup.R') #get project locations in s3 and working directory
 
 #Load LSOA to CCG lookups
 
-LSOA11CD_to_CCG21 <-  s3read_using(fread
-             , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2021)_Lookup_in_England.csv") # File to open
-             , bucket = IHT_bucket)
+LSOA11CD_to_CCG21 <-  fread(paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2021)_Lookup_in_England.csv")) # File to open
 
-LSOA11CD_to_CCG19 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2019)_Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket)
+LSOA11CD_to_CCG19 <-  fread(paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2019)_Lookup_in_England.csv")) # File to open
 
-LSOA11CD_to_CCG18 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2018)_Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket)
+LSOA11CD_to_CCG18 <-  fread(paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2018)_Lookup_in_England.csv")) # File to open
 
-LSOA11CD_to_CCG17 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2017)_Lookup_in_England_(Version_4).csv") # File to open
-                                   , bucket = IHT_bucket)
+LSOA11CD_to_CCG17 <-  fread(paste0(RTT_subfolder,"/LSOA to CCG lookups/","Lower_Layer_Super_Output_Area_(2011)_to_Clinical_Commissioning_Group_to_Local_Authority_District_(April_2017)_Lookup_in_England_(Version_4).csv")) # File to open
 
 #Join all CCG lookups
 
@@ -77,9 +69,8 @@ LSOA11CD_to_CCG_joined_long <- LSOA11CD_to_CCG_joined_wide %>%
 
 #Load IMD scores by LSOA
 
-LSOA11CD_to_IMD2019_raw <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/IMD 2019/","imd2019lsoa.csv") # File to open
-                                   , bucket = IHT_bucket)
+LSOA11CD_to_IMD2019_raw <-  fread(paste0(RTT_subfolder,"/IMD 2019/","imd2019lsoa.csv")) # File to open
+
 #High scores are decile 1
 
 # LSOA11CD_to_IMD2019_raw %>%
@@ -102,10 +93,9 @@ LSOA11CD_to_IMD2019 <- LSOA11CD_to_IMD2019 %>%
 
 #Load population LSOA
 
-LSOA11CD_to_pop19 <-  s3read_using(read_excel
-                                     , object = paste0(RTT_subfolder,"/Population/","SAPE22DT2-mid-2019-lsoa-syoa-estimates-unformatted.xlsx") # File to open
-                                     , bucket = IHT_bucket,
-                                   sheet="Mid-2019 Persons",skip=4) 
+LSOA11CD_to_pop19 <-  read_excel(paste0(RTT_subfolder, "/Population/",
+                                        "SAPE22DT2-mid-2019-lsoa-syoa-estimates-unformatted.xlsx"), # File to open
+                                        sheet = "Mid-2019 Persons", skip = 4) 
 
 LSOA11CD_to_pop19 <- LSOA11CD_to_pop19 %>%
   select(.,`LSOA Code`, `All Ages`) %>%
@@ -158,25 +148,17 @@ s3write_using(IMD_by_CCG_wide # What R object we are saving
 
 #Load LSOA to CCG lookups
 
-CCG_to_REG21 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England_(Region)_(April_2021)_Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket) %>%
-  mutate(.,ccg_year="2021") %>% rename(., CCGCDH=CCG21CDH,NHSERNM=NHSER21NM,STPNM=STP21NM)
+CCG_to_REG21 <-  fread(paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England_(Region)_(April_2021)_Lookup_in_England.csv")) |> # File to open
+                  mutate(ccg_year="2021") %>% rename(., CCGCDH=CCG21CDH,NHSERNM=NHSER21NM,STPNM=STP21NM)
 
-CCG_to_REG20 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England__Region___April_2020__Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket) %>%
-  mutate(.,ccg_year="2020") %>% rename(., CCGCDH=CCG20CDH,NHSERNM=NHSER20NM,STPNM=STP20NM)
+CCG_to_REG20 <-  fread(paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_STP_and_NHS_England__Region___April_2020__Lookup_in_England.csv")) |> # File to open
+                  mutate(ccg_year="2020") %>% rename(., CCGCDH=CCG20CDH,NHSERNM=NHSER20NM,STPNM=STP20NM)
 
-CCG_to_REG19 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket) %>%
-  mutate(.,ccg_year="2019") %>% rename(., CCGCDH=CCG19CDH,NHSERNM=NHSER19NM) #No STPs in 2019 and back
+CCG_to_REG19 <-  fread(paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2019)_Lookup_in_England.csv")) |> # File to open
+                  mutate(ccg_year="2019") %>% rename(., CCGCDH=CCG19CDH,NHSERNM=NHSER19NM) #No STPs in 2019 and back
 
-CCG_to_REG18 <-  s3read_using(fread
-                                   , object = paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2018)_Lookup_in_England.csv") # File to open
-                                   , bucket = IHT_bucket) %>%
-  mutate(.,ccg_year="2018") %>% rename(., CCGCDH=CCG18CDH,NHSERNM=NHSER18NM)
+CCG_to_REG18 <-  fread(paste0(RTT_subfolder,"/CCG to NHSE lookups/","Clinical_Commissioning_Group_to_NHS_England_(Region,_Local_Office)_and_NHS_England_(Region)_(April_2018)_Lookup_in_England.csv")) |> # File to open
+                  mutate(ccg_year="2018") %>% rename(., CCGCDH=CCG18CDH,NHSERNM=NHSER18NM)
 
 #2017 lookup doesn't have the CCG codes we need
 # CCG_to_REG17 <-  s3read_using(fread
