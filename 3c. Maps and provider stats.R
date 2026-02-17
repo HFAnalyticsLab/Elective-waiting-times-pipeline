@@ -56,7 +56,8 @@ during_COVID <- c(paste("RTT",toupper(month.name)[3:12],"2020",sep="-"),
 post_COVID <- c(paste("RTT",toupper(month.name)[6:12],"2021",sep="-"),
                 paste("RTT",toupper(month.name),"2022",sep="-"),
                 paste("RTT",toupper(month.name),"2023",sep="-"),
-                paste("RTT",toupper(month.name)[1:3],"2024",sep="-"))
+                paste("RTT",toupper(month.name),"2024",sep="-"),
+                paste("RTT",toupper(month.name),"2025",sep="-"))
 
 ###############################################
 ################### Load files ################
@@ -114,7 +115,7 @@ RTT_allmonths <- RTT_allmonths %>%
   mutate(.,Treatment.Function.Name=ifelse(Treatment.Function.Name=="Other - Surgicals","Other",Treatment.Function.Name))
 
 #Provider-level aggregates
-
+## JH charts here
 #All specialties
 number_specialties_by_provider <- RTT_allmonths %>%
   filter(.,Treatment.Function.Name!="Total") %>% #Total is not a specialty, we don't need to count it

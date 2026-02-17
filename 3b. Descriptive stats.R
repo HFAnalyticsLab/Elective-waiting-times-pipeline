@@ -69,9 +69,7 @@ combinations.one <- expand.grid(months=all_months,
 
 #### Load
 
-admitted.by.spec.is <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/Summary tables/","Admitted by specialty and IS.csv") # File to open
-                              , bucket = IHT_bucket) # Bucket name defined above
+admitted.by.spec.is <- fread(paste0(RTT_subfolder,"/Summary tables/","Admitted by specialty and IS.csv")) # File to open
 
 #### Remove combinations without patients
 
@@ -79,7 +77,6 @@ admitted.by.spec.is <- admitted.by.spec.is %>%
   filter(.,total.patients>0)
 
 #### Add date indicator
-
 admitted.by.spec.is <- admitted.by.spec.is %>%
   mutate(.,year_clean=paste0("20",str_sub(monthyear, start= -2)),
          month_clean=substr(monthyear, 1, 3)) %>%
@@ -98,7 +95,6 @@ mini_months_count <- admitted.by.spec.is %>%
   ungroup()
 
 ################## Wait time analysis
-
 scatter_plot_data_1 <- admitted.by.spec.is %>%
   group_by(COVID_timing,specialty,type,independent) %>%
   summarise(total.patients=sum(total.patients,na.rm=TRUE),
@@ -258,12 +254,9 @@ combinations.two <- expand.grid(months=all_months,
 
 #### Load
 
-admitted.by.imd.is <- s3read_using(fread
-                                    , object = paste0(RTT_subfolder,"/Summary tables/","Admitted by IMD and IS.csv") # File to open
-                                    , bucket = IHT_bucket) # Bucket name defined above
+admitted.by.imd.is <- fread(paste0(RTT_subfolder,"/Summary tables/","Admitted by IMD and IS.csv")) # File to open
 
 #### Remove combinations without patients
-
 admitted.by.imd.is <- admitted.by.imd.is %>%
   filter(.,total.patients>0)
 

@@ -277,9 +277,6 @@ for (j in all_specialties){
     
 }
 
-## this doesn't just add that folder!
-s3sync(files = dir('Charts_Oct_Update', recursive = TRUE),
-       bucket = IHT_bucket, direction = 'upload')
 
 unlink('Charts_Oct_Update')
 
@@ -345,13 +342,8 @@ for (i in data_pathway){
 data_export <- rbindlist(data_list)
 write_csv(data_export, file = 'RTT_processed.csv')
 
-put_object(file = 'RTT_processed.csv',
-           object = paste0(RTT_subfolder, '/RTT_processed.csv'),
-           bucket = IHT_bucket)
-unlink('RTT_processed.csv')
-
 ## arrow dataset
 library(arrow)
 write_dataset(RTT_allmonths,
-              paste0('s3://', IHT_bucket, '/arrow_rtt'),
+              path = 'S:/CAT/arrow_rtt/',
               partitioning = 'monthyr')

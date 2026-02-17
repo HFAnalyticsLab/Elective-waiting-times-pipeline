@@ -69,7 +69,8 @@ year_lkup <- function(y, l=12){
 
 #All together
 
-inputs <- plyr::rbind.fill(year_lkup(24,5),
+inputs <- plyr::rbind.fill(year_lkup(25, 9),
+                           year_lkup(24),
                            year_lkup(23),
                            year_lkup(22),
                            year_lkup(21),
@@ -82,7 +83,9 @@ inputs <- plyr::rbind.fill(year_lkup(24,5),
 return_links_rtt <- function(month,series){
   
   #Find landing page for the appropriate financial year
-  if (series=="2425"){
+  if (series=="2526"){
+    read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2025-26/")
+  } else if (series=="2425"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2024-25/")
   } else if (series=="2324"){
     read.first.page <- read_html("https://www.england.nhs.uk/statistics/statistical-work-areas/rtt-waiting-times/rtt-data-2023-24/")
@@ -282,8 +285,8 @@ rm(storage,summary_month)
 
 #Save
 setwd(paste0(R_workbench,"/",temp_folder,"/"))
-fwrite(IS_providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
-                                             "/IS_providers_allmonths.csv"), sep = ",")
+fwrite(IS_providers_allmonths, file = paste0('P:/hughesja/Elective-waiting-times-pipeline/RTT_temp_data/',
+                                             "IS_providers_allmonths.csv"), sep = ",")
 rm(IS_providers_allmonths)
 
 #### Get all NHS provider locations / region
@@ -291,7 +294,7 @@ for (s in 1:nrow(links.out.df)){
   
   #Open all provider files for one month and append
   
-  setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
+  setwd(paste0('\\\\dfsthfode/users/hughesja/Elective-waiting-times-pipeline/RTT_temp_data',"/temp files"))
   setwd(as.character(links.out.df$month[s]))
   
   incomplete <- read_excel(paste0(links.out.df$month[s],"-providers-incomplete.",
@@ -340,7 +343,7 @@ rm(storage,summary_month)
 
 #Save
 setwd(paste0(R_workbench,"/",temp_folder,"/"))
-fwrite(providers_allmonths, file = paste0(R_workbench,"/RTT_temp_data/",
+fwrite(providers_allmonths, file = paste0('P:/hughesja/Elective-waiting-times-pipeline/RTT_temp_data/',
                                              "/providers_allmonths.csv"), sep = ",")
 rm(IS_providers_allmonths)
 
@@ -351,13 +354,13 @@ rm(IS_providers_allmonths)
 
 #Re-load IS provider by month
 
-IS_providers_allmonths <- fread(paste0(R_workbench,"/",temp_folder,"/IS_providers_allmonths.csv"),
+IS_providers_allmonths <- fread('P:/hughesja/Elective-waiting-times-pipeline/RTT_temp_data/providers_allmonths.csv',
                                 header=TRUE, sep=",", check.names=T)
 
 #Append all files
 for (j in 1:nrow(links.out.df)){
   
-  setwd(paste0(R_workbench,"/",temp_folder,"/temp files/"))
+  setwd(paste0('\\\\dfsthfode/users/hughesja/Elective-waiting-times-pipeline/RTT_temp_data',"/temp files"))
   setwd(as.character(links.out.df$month[j]))
   
   #Display progress
@@ -397,24 +400,3 @@ rm(links.out.df,IS_providers_allmonths,RTT_month,storage.rtt)
 
 setwd(paste0(R_workbench,"/",temp_folder,"/"))
 unlink("temp files",recursive=TRUE)
-
-#######################################################################
-################### Sync local folder to S3 bucket ####################
-#######################################################################
-
-setwd(paste0(R_workbench,"/",temp_folder,"/"))
-
-put_object(file = 'RTT_allmonths_new.csv',
-           object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv"),
-           bucket = IHT_bucket, show_progress = TRUE,
-           multipart=TRUE)
-
-put_object(file = 'IS_providers_allmonths.csv',
-           object = paste0(RTT_subfolder,"/","IS_providers_allmonths.csv"),
-           bucket = IHT_bucket, show_progress = TRUE,
-           multipart=TRUE)
-
-put_object(file = 'providers_allmonths.csv',
-           object = paste0(RTT_subfolder,"/","providers_allmonths.csv"),
-           bucket = IHT_bucket, show_progress = TRUE,
-           multipart=TRUE)

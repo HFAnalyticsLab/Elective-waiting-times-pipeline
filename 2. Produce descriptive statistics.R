@@ -46,17 +46,13 @@ not_all_na <- function(x) any(!is.na(x))
 #                                 , object = paste0(RTT_subfolder,"/Custom RTT lookups/","CCG_NHSER_joined_wide.csv") # File to open
 #                                 , bucket = IHT_bucket) # Bucket name defined above
 
-provider_to_IMD_region <- s3read_using(fread
-                                       , object = paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv") # File to open
-                                       , bucket = IHT_bucket) # Bucket name defined above
+provider_to_IMD_region <- fread(paste0(RTT_subfolder,"/Custom RTT lookups/","provider_to_IMD_region.csv")) # File to open
 
 #############################################################
 ################### Import monthly RTT data #################
 #############################################################
 
-RTT_allmonths <- s3read_using(fread
-                              , object = paste0(RTT_subfolder,"/","RTT_allmonths_new.csv") # File to open
-                              , bucket = IHT_bucket) # Bucket name defined above
+RTT_allmonths <- fread(paste0(RTT_subfolder,"/","RTT_allmonths_new.csv")) # File to open
 
 ##########################################################
 ################### Create new variables #################
