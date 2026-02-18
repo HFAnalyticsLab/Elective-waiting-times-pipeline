@@ -446,10 +446,10 @@ region_pop_2020 <- region_pop_2020 %>%
 #Comparison by region
 
 completed_region_table <- RTT_allmonths %>%
-  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(Period %in% fy_202324),
-         RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
-         Treatment.Function.Name=="Total") %>%
+  #left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
+  filter(toupper(Period) %in% paste("RTT",toupper(month.name),"2025",sep="-"),
+         RTT.Part.Description == "Completed Pathways For Admitted Patients",
+         Treatment.Function.Name == "Total") %>%
   group_by(region,IS_provider) %>%
   summarise(Total.All=sum(Total.All,na.rm=TRUE)) %>% 
   ungroup() %>%
@@ -462,9 +462,9 @@ completed_region_table <- RTT_allmonths %>%
          IS_provider=ifelse(IS_provider==1,"IS","NHS"),
          pathways_per_person=Total.All/pop20*100)
 
-regions_casemix_table <- RTT_allmonths %>%
-  left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
-  filter(.,(toupper(Period) %in% fy_202324),
+regions_casemix_table <- RTT_allmonths %>% #select(-region) %>%
+  #left_join(.,provider_to_IMD_region,by="Provider.Org.Code") %>% 
+  filter(toupper(Period) %in% paste("RTT",toupper(month.name),"2025",sep="-"),
          RTT.Part.Description %in% c("Completed Pathways For Admitted Patients"),
          Treatment.Function.Name!="Total") %>%
   mutate(IS_provider=ifelse(IS_provider==1,"IS","NHS")) %>% 
